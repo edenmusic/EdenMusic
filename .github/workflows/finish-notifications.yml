@@ -1,0 +1,216 @@
+name: Finish fan notifications
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[finish-notifications]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch notification feed and dashboard
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const scriptPath = 'www/script.js';
+          const htmlPath = 'www/index.html';
+          const cssPath = 'www/style.css';
+          let script = fs.readFileSync(scriptPath, 'utf8');
+          let html = fs.readFileSync(htmlPath, 'utf8');
+          let css = fs.readFileSync(cssPath, 'utf8');
+
+          const start = script.indexOf('async function loadNotifications() {');
+          const end = script.indexOf('async function updateNotificationAccountLabel()', start);
+          if (start < 0 || end < 0) throw new Error('Notification function boundaries not found');
+
+          const replacement = `async function loadNotifications() {
+    const list = document.getElementById("notifications-list");
+    if (!list) return;
+
+    list.innerHTML = '<p class="dashboard-empty">Loading notifications...</p>';
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        list.innerHTML = '<div class="profile-section"><span class="eyebrow">NOTIFICATIONS</span><h3>Sign in to receive notifications</h3><p>Create or sign in to your fan account to stay updated.</p></div>';
+        return;
+    }
+
+    const { data, error } = await supabase
+        .from("notifications")
+        .select("id, type, title, body, target_type, target_id, scheduled_for, created_at, notification_reads(user_id, read_at)")
+        .or("user_id.is.null,user_id.eq." + user.id)
+        .or("scheduled_for.is.null,scheduled_for.lte." + new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+    if (error) {
+        console.error("Notifications load error:", error);
+        list.innerHTML = '<p class="dashboard-empty">Unable to load notifications.</p>';
+        return;
+    }
+
+    if (!data?.length) {
+        list.innerHTML = '<div class="profile-section"><span class="eyebrow">NOTIFICATIONS</span><h3>No notifications yet</h3><p>You\\'re all caught up.</p></div>';
+        return;
+    }
+
+    list.innerHTML = data.map(notification => {
+        const read = Array.isArray(notification.notification_reads) && notification.notification_reads.some(row => row.user_id === user.id);
+        const date = notification.created_at ? new Date(notification.created_at).toLocaleString() : "";
+        const typeLabel = String(notification.type || "notification").replace(/_/g, " ").toUpperCase();
+        const safeTitle = String(notification.title || "Eden Music update").replace(/[<>]/g, "");
+        const safeBody = String(notification.body || "").replace(/[<>]/g, "");
+        return \`<button type="button" class="profile-section notification-card \${read ? "notification-read" : "notification-unread"}" data-notification-id="\${notification.id}" data-target-type="\${notification.target_type || ""}" data-target-id="\${notification.target_id || ""}" onclick="handleNotificationClick(this)">
+            <span class="eyebrow">\${typeLabel}\${read ? "" : " • NEW"}</span>
+            <h3>\${safeTitle}</h3>
+            <p>\${safeBody}</p>
+            \${date ? \`<small>\${date}</small>\` : ""}
+        </button>\`;
+    }).join("");
+
+    updateNotificationBadge(data);
+}
+
+async function markNotificationRead(notificationId) {
+    if (!notificationId) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+        .from("notification_reads")
+        .upsert({ notification_id: notificationId, user_id: user.id, read_at: new Date().toISOString() }, { onConflict: "notification_id,user_id" });
+
+    if (error) console.error("Mark notification read error:", error);
+}
+
+async function markAllNotificationsRead() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+        .from("notifications")
+        .select("id")
+        .or("user_id.is.null,user_id.eq." + user.id);
+
+    if (error) {
+        console.error("Load notifications for mark-all error:", error);
+        return;
+    }
+
+    const rows = (data || []).map(item => ({ notification_id: item.id, user_id: user.id, read_at: new Date().toISOString() }));
+    if (rows.length) {
+        const { error: upsertError } = await supabase.from("notification_reads").upsert(rows, { onConflict: "notification_id,user_id" });
+        if (upsertError) console.error("Mark all notifications read error:", upsertError);
+    }
+    await loadNotifications();
+}
+
+function updateNotificationBadge(notifications) {
+    const button = document.querySelector(".notification-btn");
+    if (!button) return;
+    const unread = (notifications || []).filter(item => !(Array.isArray(item.notification_reads) && item.notification_reads.length)).length;
+    button.classList.toggle("has-unread", unread > 0);
+    button.setAttribute("aria-label", unread ? \`Notifications (\${unread} unread)\` : "Notifications");
+}
+
+async function handleNotificationClick(element) {
+    if (!element) return;
+    await markNotificationRead(element.dataset.notificationId);
+    element.classList.remove("notification-unread");
+    element.classList.add("notification-read");
+
+    const type = element.dataset.targetType;
+    const id = element.dataset.targetId;
+    if (!type || !id) return;
+
+    if (type === "song") {
+        closeNotifications();
+        openMusicScreen();
+        requestAnimationFrame(() => playSong(id));
+    } else if (type === "fun_vault_video") {
+        closeNotifications();
+        await openFanVault();
+    } else if (type === "live_event" || type === "upcoming_event") {
+        closeNotifications();
+        openFanVaultUpcomingEvents();
+    }
+}
+
+async function createEdenNotification(type, title, body, targetType = null, targetId = null, scheduledFor = null) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+    if (profile?.role !== "developer") return false;
+
+    const { error } = await supabase.from("notifications").insert({
+        user_id: null,
+        type,
+        title,
+        body: body || null,
+        target_type: targetType,
+        target_id: targetId,
+        scheduled_for: scheduledFor
+    });
+    if (error) {
+        console.error("Create notification error:", error);
+        return false;
+    }
+    return true;
+}
+
+window.markNotificationRead = markNotificationRead;
+window.markAllNotificationsRead = markAllNotificationsRead;
+window.handleNotificationClick = handleNotificationClick;
+window.createEdenNotification = createEdenNotification;
+
+`;
+          script = script.slice(0, start) + replacement + script.slice(end);
+
+          if (!script.includes('alert("Song saved successfully!");\n\n        titleInput.value')) throw new Error('Song success marker not found');
+          script = script.replace('alert("Song saved successfully!");\n\n        titleInput.value', 'alert("Song saved successfully!");\n\n        createEdenNotification("new_music", `New song: ${title}`, `Eden has released ${title}.`, "song", songId).catch(console.error);\n\n        titleInput.value');
+
+          if (!script.includes('message.textContent = "Fun Vault video uploaded successfully!";')) throw new Error('Fan Vault success marker not found');
+          script = script.replace('message.textContent = "Fun Vault video uploaded successfully!";', 'message.textContent = "Fun Vault video uploaded successfully!";\n\n        if (publishedInput?.checked) {\n            createEdenNotification("fan_vault_video", `New Fan Vault video: ${titleInput?.value || "Exclusive video"}`, descriptionInput?.value || "A new exclusive video is available in the Fan Vault.", "fun_vault_video", null).catch(console.error);\n        }');
+
+          const menuMarker = '<button type="button" class="developer-dashboard-menu-item" onclick="openDeveloperDashboardSection(\'profile\')">';
+          if (!html.includes(menuMarker)) throw new Error('Dashboard menu marker not found');
+          html = html.replace(menuMarker, '<button type="button" class="developer-dashboard-menu-item" onclick="openDeveloperDashboardSection(\'notifications\')"><div><span class="eyebrow">COMMUNICATION</span><strong>Notifications</strong><small>Publish updates and alerts to fans.</small></div><span class="developer-dashboard-menu-arrow">›</span></button>\n    ' + menuMarker);
+
+          const sectionMarker = '<div id="developer-dashboard-section-profile" class="developer-dashboard-section">';
+          if (!html.includes(sectionMarker)) throw new Error('Dashboard section marker not found');
+          const notificationSection = `<div id="developer-dashboard-section-notifications" class="developer-dashboard-section"><div class="dashboard-header"><div><span class="eyebrow">FAN NOTIFICATIONS</span><h3>Publish Notification</h3><p>Send an update to every fan.</p></div></div><div class="dashboard-card"><label for="notification-type-input">Notification Type</label><select id="notification-type-input"><option value="announcement">Artist announcement</option><option value="new_music">New music</option><option value="fan_vault_video">Fan Vault video</option><option value="live_starting">Live starting</option><option value="event_reminder">Event reminder</option><option value="merchandise_drop">Merchandise drop</option></select><label for="notification-title-input">Title</label><input id="notification-title-input" type="text" placeholder="Notification title"><label for="notification-body-input">Message</label><textarea id="notification-body-input" rows="4" placeholder="Write the update fans should receive..."></textarea><button type="button" class="primary-btn" onclick="publishDashboardNotification()">Publish Notification</button><p id="notification-publish-message"></p></div></div>\n\n    `;
+          html = html.replace(sectionMarker, notificationSection + sectionMarker);
+
+          const functionMarker = 'window.createEdenNotification = createEdenNotification;';
+          if (!script.includes(functionMarker)) throw new Error('Notification helper marker missing after patch');
+          script = script.replace(functionMarker, functionMarker + '\n\nasync function publishDashboardNotification() {\n    const type = document.getElementById("notification-type-input")?.value;\n    const title = document.getElementById("notification-title-input")?.value.trim();\n    const body = document.getElementById("notification-body-input")?.value.trim();\n    const message = document.getElementById("notification-publish-message");\n    if (!title) { if (message) message.textContent = "Enter a notification title."; return; }\n    const ok = await createEdenNotification(type, title, body);\n    if (message) message.textContent = ok ? "Notification published." : "Could not publish notification.";\n    if (ok) { document.getElementById("notification-title-input").value = ""; document.getElementById("notification-body-input").value = ""; }\n}\nwindow.publishDashboardNotification = publishDashboardNotification;');
+
+          css += `\n\n/* Eden Music notification states */\n.notification-card { width: 100%; text-align: left; cursor: pointer; margin-bottom: 12px; transition: opacity .2s, transform .2s; }\n.notification-card.notification-unread { border-left: 3px solid currentColor; }\n.notification-card.notification-read { opacity: .72; }\n.notification-btn.has-unread { position: relative; }\n.notification-btn.has-unread::after { content: ""; position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }\n`;
+
+          fs.writeFileSync(scriptPath, script);
+          fs.writeFileSync(htmlPath, html);
+          fs.writeFileSync(cssPath, css);
+          NODE
+
+      - name: Validate JavaScript
+        run: node --input-type=module --check < www/script.js
+
+      - name: Commit patched app
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add www/script.js www/index.html www/style.css
+          git commit -m "Finish fan notifications integration" || exit 0
+          git push
+
+      - name: Remove temporary workflow
+        run: |
+          git rm .github/workflows/finish-notifications.yml
+          git commit -m "Remove temporary notification workflow"
+          git push
