@@ -1,0 +1,132 @@
+name: Apply notifications integration
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[apply-notifications-integration]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch notification screen
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'www/script.js';
+          let source = fs.readFileSync(path, 'utf8');
+
+          const start = source.indexOf('async function loadNotifications() {');
+          const end = source.indexOf('async function updateNotificationAccountLabel()', start);
+          if (start < 0 || end < 0) throw new Error('Notification function boundaries not found');
+
+          const replacement = String.raw`async function loadNotifications() {
+    const list = document.getElementById("notifications-list");
+    if (!list) return;
+
+    list.innerHTML = '<p class="dashboard-empty">Loading notifications...</p>';
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        list.innerHTML = '<div class="profile-section"><span class="eyebrow">NOTIFICATIONS</span><h3>Sign in to receive notifications</h3><p>Create or sign in to your fan account to stay updated.</p></div>';
+        return;
+    }
+
+    const { data, error } = await supabase
+        .from("notifications")
+        .select("id, type, title, body, target_type, target_id, scheduled_for, created_at, notification_reads(user_id, read_at)")
+        .or(`user_id.is.null,user_id.eq.${user.id}`)
+        .or(`scheduled_for.is.null,scheduled_for.lte.${new Date().toISOString()}`)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+    if (error) {
+        console.error("Notifications load error:", error);
+        list.innerHTML = '<p class="dashboard-empty">Unable to load notifications.</p>';
+        return;
+    }
+
+    if (!data?.length) {
+        list.innerHTML = '<div class="profile-section"><span class="eyebrow">NOTIFICATIONS</span><h3>No notifications yet</h3><p>You\'re all caught up.</p></div>';
+        return;
+    }
+
+    list.innerHTML = data.map(notification => {
+        const read = Array.isArray(notification.notification_reads) && notification.notification_reads.some(row => row.user_id === user.id);
+        const date = notification.created_at ? new Date(notification.created_at).toLocaleString() : "";
+        const target = notification.target_id ? String(notification.target_id) : "";
+        const typeLabel = String(notification.type || "notification").replace(/_/g, " ").toUpperCase();
+        return `<button type="button" class="profile-section notification-card${read ? " notification-read" : " notification-unread"}" data-notification-id="${notification.id}" data-target-type="${notification.target_type || ""}" data-target-id="${target}" onclick="handleNotificationClick(this)">
+            <span class="eyebrow">${typeLabel}${read ? "" : " • NEW"}</span>
+            <h3>${notification.title || "Eden Music update"}</h3>
+            <p>${notification.body || ""}</p>
+            ${date ? `<small>${date}</small>` : ""}
+        </button>`;
+    }).join("");
+}
+
+async function markNotificationRead(notificationId) {
+    if (!notificationId) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+        .from("notification_reads")
+        .upsert({ notification_id: notificationId, user_id: user.id, read_at: new Date().toISOString() }, { onConflict: "notification_id,user_id" });
+
+    if (error) console.error("Mark notification read error:", error);
+}
+
+async function handleNotificationClick(element) {
+    if (!element) return;
+    await markNotificationRead(element.dataset.notificationId);
+    element.classList.remove("notification-unread");
+    element.classList.add("notification-read");
+
+    const type = element.dataset.targetType;
+    const id = element.dataset.targetId;
+    if (!type || !id) return;
+
+    if (type === "song") {
+        closeNotifications();
+        openMusicScreen();
+        requestAnimationFrame(() => playSong(id));
+    } else if (type === "fun_vault_video") {
+        closeNotifications();
+        await openFanVault();
+    } else if (type === "live_event" || type === "upcoming_event") {
+        closeNotifications();
+        openFanVaultUpcomingEvents();
+    }
+}
+
+window.markNotificationRead = markNotificationRead;
+window.handleNotificationClick = handleNotificationClick;
+
+`;
+
+          source = source.slice(0, start) + replacement + source.slice(end);
+          fs.writeFileSync(path, source);
+          NODE
+
+      - name: Validate JavaScript
+        run: node --input-type=module --check < www/script.js
+
+      - name: Commit patched app
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add www/script.js
+          git commit -m "Integrate notification feed and read state" || exit 0
+          git push
+
+      - name: Remove temporary workflow
+        run: |
+          git rm .github/workflows/patch-notifications.yml
+          git commit -m "Remove temporary notification patch workflow"
+          git push
