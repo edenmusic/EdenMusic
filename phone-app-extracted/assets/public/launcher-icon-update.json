@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "launcherIcon": {
+        "bucket": "app-assets",
+        "folder": "launcher-icon",
+        "file": "ic_launcher.png"
+    },
+    "roundLauncherIcon": {
+        "bucket": "app-assets",
+        "folder": "launcher-icon",
+        "file": "ic_launcher_round.png"
+    }
+}

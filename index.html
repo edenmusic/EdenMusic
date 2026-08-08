@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eden Music</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="app">
+
+    <!-- ================= HEADER ================= -->
+    <header class="top-bar">
+        <div>
+            <h1>Eden Music</h1>
+            <p>Welcome to the inner circle.</p>
+        </div>
+
+        <button class="notification-btn" onclick="showMessage('Notifications coming soon.')">
+            🔔
+        </button>
+    </header>
+
+
+    <!-- ================= ACCOUNT / GUEST ================= -->
+    <section class="welcome-card">
+
+        <div class="welcome-text">
+            <span class="eyebrow">WELCOME</span>
+            <h2>Follow the journey.</h2>
+            <p>
+                Create an account to unlock the Fan Vault,
+                follow Eden's journey and stay connected.
+            </p>
+        </div>
+
+        <div class="account-actions">
+            <button class="primary-btn" onclick="showMessage('Account creation will be connected in the next stage.')">
+                Create Account
+            </button>
+
+            <button class="secondary-btn" onclick="showMessage('Guest mode activated.')">
+                Continue as Guest
+            </button>
+        </div>
+
+    </section>
+
+
+    <!-- ================= FEATURED MUSIC ================= -->
+    <section class="section">
+
+        <div class="section-heading">
+            <div>
+                <span class="eyebrow">MUSIC</span>
+                <h2>Featured</h2>
+            </div>
+
+            <button class="text-btn" onclick="showMessage('Music section coming next.')">
+                See all
+            </button>
+        </div>
+
+        <div class="featured-song">
+
+            <div class="song-art">
+                🎵
+            </div>
+
+            <div class="song-info">
+                <span>Latest Release</span>
+                <h3>Eden Music</h3>
+                <p>Play the latest song</p>
+            </div>
+
+            <button
+                class="play-btn"
+                onclick="showMessage('The full music player will be added in Stage 2.')">
+                ▶
+            </button>
+
+        </div>
+
+    </section>
+
+
+    <!-- ================= REELS ================= -->
+    <section class="section">
+
+        <div class="section-heading">
+            <div>
+                <span class="eyebrow">BEHIND THE SCENES</span>
+                <h2>Reels</h2>
+            </div>
+
+            <span class="small-label">Guest: 5 videos</span>
+        </div>
+
+        <div class="reels-container">
+
+            <article class="reel-card reel-one">
+                <div class="reel-overlay">
+                    <span>BEHIND THE SCENES</span>
+                    <h3>Inside the journey</h3>
+                    <button onclick="showMessage('Video player will be added later.')">
+                        ▶ Watch
+                    </button>
+                </div>
+            </article>
+
+            <article class="reel-card reel-two">
+                <div class="reel-overlay">
+                    <span>STUDIO</span>
+                    <h3>Creating the music</h3>
+                    <button onclick="showMessage('Video player will be added later.')">
+                        ▶ Watch
+                    </button>
+                </div>
+            </article>
+
+            <article class="reel-card reel-three">
+                <div class="reel-overlay">
+                    <span>THE JOURNEY</span>
+                    <h3>More coming soon</h3>
+                    <button onclick="showMessage('Video player will be added later.')">
+                        ▶ Watch
+                    </button>
+                </div>
+            </article>
+
+        </div>
+
+    </section>
+
+
+    <!-- ================= FAN VAULT PREVIEW ================= -->
+    <section class="vault-card">
+
+        <div class="vault-icon">🔐</div>
+
+        <div>
+            <span class="eyebrow">EXCLUSIVE</span>
+            <h2>Fan Vault</h2>
+            <p>
+                Behind-the-scenes videos, exclusive updates,
+                live moments, merchandise and more.
+            </p>
+        </div>
+
+        <button
+            class="primary-btn"
+            onclick="showMessage('Create an account to enter the Fan Vault.')">
+            Enter Vault
+        </button>
+
+    </section>
+
+
+    <!-- ================= UPCOMING SHOWS ================= -->
+    <section class="section">
+
+        <div class="section-heading">
+            <div>
+                <span class="eyebrow">LIVE</span>
+                <h2>Upcoming Shows</h2>
+            </div>
+
+            <button
+                class="text-btn"
+                onclick="showMessage('Concert dates will be connected to the Fan Vault.')">
+                View all
+            </button>
+        </div>
+
+        <div class="concert-card">
+
+            <div class="concert-date">
+                <strong>--</strong>
+                <span>DATE</span>
+            </div>
+
+            <div class="concert-info">
+                <span>Upcoming Event</span>
+                <h3>Concert information</h3>
+                <p>Venue • Time</p>
+            </div>
+
+            <div class="concert-status">
+                Coming soon
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- ================= NOTIFICATIONS ================= -->
+    <section class="update-card">
+
+        <div class="update-icon">✨</div>
+
+        <div>
+            <span class="eyebrow">EDEN UPDATES</span>
+            <h3>Stay connected</h3>
+            <p>
+                New music, live events, releases and exclusive
+                updates will appear here.
+            </p>
+        </div>
+
+    </section>
+
+<!-- ================= MUSIC SCREEN ================= -->
+<section id="music-screen" class="music-screen">
+
+    <div class="music-screen-header">
+        <div>
+            <span class="eyebrow">EDEN MUSIC</span>
+            <h2>Music</h2>
+            <p>Listen to the latest releases.</p>
+        </div>
+
+        <button class="close-music" onclick="closeMusicScreen()">✕</button>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="music-search">
+        <span>🔎</span>
+        <input
+            type="search"
+            id="song-search"
+            placeholder="Search songs..."
+            oninput="searchSongs()">
+    </div>
+
+    <!-- SONG LIST -->
+    <div class="music-section-title">
+        <h3>All Songs</h3>
+        <span id="song-count">3 songs</span>
+    </div>
+
+    <div id="song-list">
+
+        <article class="song-row" data-title="Midnight">
+            <div class="song-number">01</div>
+
+            <div class="song-cover">🎵</div>
+
+            <div class="song-details">
+                <h3>Midnight</h3>
+                <p>Eden • R&B</p>
+            </div>
+
+            <span class="song-duration">3:42</span>
+
+            <button
+                class="song-play"
+                onclick="playSong('Midnight')">
+                ▶
+            </button>
+        </article>
+
+
+        <article class="song-row" data-title="After Hours">
+            <div class="song-number">02</div>
+
+            <div class="song-cover">🎶</div>
+
+            <div class="song-details">
+                <h3>After Hours</h3>
+                <p>Eden • Soul</p>
+            </div>
+
+            <span class="song-duration">3:18</span>
+
+            <button
+                class="song-play"
+                onclick="playSong('After Hours')">
+                ▶
+            </button>
+        </article>
+
+
+        <article class="song-row" data-title="Unreleased">
+            <div class="song-number">03</div>
+
+            <div class="song-cover">✨</div>
+
+            <div class="song-details">
+                <h3>Unreleased</h3>
+                <p>Eden • Coming soon</p>
+            </div>
+
+            <span class="song-duration">--:--</span>
+
+            <button
+                class="song-play"
+                onclick="playSong('Unreleased')">
+                ▶
+            </button>
+        </article>
+
+    </div>
+
+</section>
+   </section>
+
+<!-- ================= FULL SCREEN SONG PLAYER ================= -->
+<section id="song-player" class="song-player">
+
+    <div class="player-header">
+        <button class="player-back" onclick="closeSongPlayer()">✕</button>
+        <span>NOW PLAYING</span>
+        <button class="player-more">•••</button>
+    </div>
+
+    <div class="player-artwork">
+        <div id="player-cover">🎵</div>
+    </div>
+
+    <div class="player-info">
+        <h2 id="player-title">Midnight</h2>
+        <p id="player-artist">Eden</p>
+    </div>
+
+    <div class="player-progress">
+        <input
+            type="range"
+            id="player-progress"
+            min="0"
+            max="100"
+            value="0">
+        <div class="player-times">
+            <span id="player-current-time">0:00</span>
+            <span id="player-duration">3:42</span>
+        </div>
+    </div>
+
+    <div class="player-controls">
+        <button onclick="previousSong()">⏮</button>
+
+        <button
+            id="main-play-button"
+            class="main-play-button"
+            onclick="togglePlayer()">
+            ▶
+        </button>
+
+        <button onclick="nextSong()">⏭</button>
+    </div>
+
+    <div class="player-lyrics">
+        <h3>Lyrics</h3>
+        <p id="player-lyrics-text">
+            Lyrics will appear here.
+        </p>
+    </div>
+
+</section>
+
+<!-- ================= BOTTOM NAVIGATION ================= --> 

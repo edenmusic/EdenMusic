@@ -1,0 +1,3012 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --bg: #08060b;
+    --surface: #111016;
+    --surface-2: #18151e;
+    --border: rgba(255,255,255,0.08);
+    --text: #ffffff;
+    --muted: #aaa4b2;
+    --accent: #b45cff;
+    --accent-2: #7c3aed;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+}
+
+button {
+    font: inherit;
+    cursor: pointer;
+    border: none;
+}
+
+.app {
+    width: 100%;
+    max-width: 900px;
+    margin: auto;
+    padding: 20px 18px 100px;
+}
+
+/* HEADER */
+
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.top-bar h1 {
+    font-size: 28px;
+    letter-spacing: -0.5px;
+}
+
+.top-bar p {
+    color: var(--muted);
+    margin-top: 5px;
+    font-size: 14px;
+}
+
+.notification-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--surface);
+    color: white;
+    border: 1px solid var(--border);
+    font-size: 19px;
+}
+
+/* GENERAL */
+
+.eyebrow {
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+}
+
+.section {
+    margin-top: 30px;
+}
+
+.section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    margin-bottom: 14px;
+}
+
+.section-heading h2 {
+    margin-top: 5px;
+    font-size: 22px;
+}
+
+.text-btn {
+    background: none;
+    color: var(--accent);
+    font-size: 13px;
+}
+
+.small-label {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+/* WELCOME */
+
+.welcome-card {
+    padding: 24px;
+    border-radius: 24px;
+    background:
+        radial-gradient(circle at top right, rgba(180,92,255,.25), transparent 45%),
+        linear-gradient(135deg, #17121f, #0e0c12);
+    border: 1px solid var(--border);
+}
+
+.welcome-text h2 {
+    font-size: 30px;
+    margin: 8px 0;
+}
+
+.welcome-text p {
+    color: var(--muted);
+    line-height: 1.6;
+    max-width: 600px;
+}
+
+.account-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.primary-btn,
+.secondary-btn {
+    padding: 12px 17px;
+    border-radius: 12px;
+    font-weight: bold;
+}
+
+.primary-btn {
+    background: var(--accent);
+    color: #fff;
+}
+
+.secondary-btn {
+    background: rgba(255,255,255,.06);
+    color: white;
+    border: 1px solid var(--border);
+}
+
+/* MUSIC */
+
+.featured-song {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+}
+
+.song-art {
+    width: 62px;
+    height: 62px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    font-size: 27px;
+    background: linear-gradient(135deg, #6d28d9, #b45cff);
+}
+
+.song-info {
+    flex: 1;
+}
+
+.song-info span {
+    color: var(--accent);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.song-info h3 {
+    margin-top: 4px;
+}
+
+.song-info p {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 3px;
+}
+
+.play-btn {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background: white;
+    color: #111;
+    font-size: 16px;
+}
+
+/* REELS */
+
+.reels-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.reel-card {
+    min-height: 300px;
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border);
+    background-size: cover;
+    background-position: center;
+}
+
+.reel-one {
+    background: linear-gradient(160deg, #251535, #09070b);
+}
+
+.reel-two {
+    background: linear-gradient(160deg, #321e2b, #0b080c);
+}
+
+.reel-three {
+    background: linear-gradient(160deg, #182538, #08090c);
+}
+
+.reel-overlay {
+    position: absolute;
+    inset: 0;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: end;
+    background: linear-gradient(transparent 25%, rgba(0,0,0,.9));
+}
+
+.reel-overlay span {
+    color: #ddd;
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+.reel-overlay h3 {
+    margin: 6px 0 12px;
+}
+
+.reel-overlay button {
+    width: fit-content;
+    padding: 8px 12px;
+    border-radius: 9px;
+    background: white;
+    color: #111;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* VAULT */
+
+.vault-card {
+    margin-top: 30px;
+    padding: 22px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, #18121f, #100d15);
+    border: 1px solid rgba(180,92,255,.25);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 16px;
+}
+
+.vault-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 15px;
+    display: grid;
+    place-items: center;
+    background: rgba(180,92,255,.12);
+    font-size: 23px;
+}
+
+.vault-card h2 {
+    margin: 5px 0;
+}
+
+.vault-card p {
+    color: var(--muted);
+    line-height: 1.5;
+    font-size: 13px;
+}
+
+/* CONCERTS */
+
+.concert-card {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+}
+
+.concert-date {
+    width: 60px;
+    height: 65px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    background: #1b1424;
+    text-align: center;
+}
+
+.concert-date strong {
+    font-size: 22px;
+}
+
+.concert-date span {
+    font-size: 9px;
+    color: var(--muted);
+}
+
+.concert-info {
+    flex: 1;
+}
+
+.concert-info span {
+    color: var(--accent);
+    font-size: 11px;
+}
+
+.concert-info h3 {
+    margin: 4px 0;
+}
+
+.concert-info p {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.concert-status {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+/* UPDATES */
+
+.update-card {
+    margin-top: 30px;
+    padding: 18px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 18px;
+}
+
+.update-icon {
+    font-size: 25px;
+}
+
+.update-card h3 {
+    margin: 4px 0;
+}
+
+.update-card p {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* BOTTOM NAV */
+
+.bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+    background: rgba(10, 10, 12, 0.96);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    box-shadow: 0 -8px 25px rgba(0, 0, 0, 0.22);
+    z-index: 900;
+}
+
+.nav-item {
+    position: relative;
+    border: 0;
+    border-radius: 18px;
+    background: transparent;
+    color: var(--muted);
+    padding: 8px 4px;
+    min-height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.nav-item:active {
+    transform: scale(0.94);
+}
+
+.nav-icon {
+    font-size: 21px;
+    line-height: 1;
+}
+
+.nav-item small {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+.nav-item.active {
+    color: var(--accent);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.nav-item.active::after {
+    content: "";
+    position: absolute;
+    bottom: 4px;
+    width: 18px;
+    height: 3px;
+    border-radius: 99px;
+    background: var(--accent);
+}
+
+/* MESSAGE */
+
+.message-box {
+    position: fixed;
+    left: 50%;
+    bottom: 90px;
+    transform: translateX(-50%) translateY(20px);
+    padding: 12px 17px;
+    border-radius: 12px;
+    background: #24202b;
+    border: 1px solid var(--border);
+    color: white;
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: .25s ease;
+    z-index: 100;
+    text-align: center;
+    max-width: 90%;
+}
+
+.message-box.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 650px) {
+
+    .app {
+        padding: 16px 14px 100px;
+    }
+
+    .welcome-text h2 {
+        font-size: 26px;
+    }
+
+    .reels-container {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        padding-bottom: 5px;
+    }
+
+    .reel-card {
+        min-width: 230px;
+        height: 330px;
+        scroll-snap-align: start;
+    }
+
+    .vault-card {
+        grid-template-columns: auto 1fr;
+    }
+
+    .vault-card .primary-btn {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+
+    .concert-status {
+        display: none;
+    }
+}
+
+/* ================= MUSIC SCREEN ================= */
+
+.music-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    overflow-y: auto;
+    background: var(--bg);
+    padding: 24px 18px 110px;
+}
+
+.music-screen.active {
+    display: block;
+}
+
+.music-screen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    max-width: 900px;
+    margin: 0 auto 24px;
+}
+
+.music-screen-header h2 {
+    font-size: 32px;
+    margin-top: 6px;
+}
+
+.music-screen-header p {
+    color: var(--muted);
+    margin-top: 5px;
+}
+
+.close-music {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--surface);
+    color: white;
+    border: 1px solid var(--border);
+    font-size: 18px;
+}
+
+.music-search {
+    max-width: 900px;
+    margin: 0 auto 25px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 15px;
+}
+
+.music-search span {
+    font-size: 17px;
+}
+
+.music-search input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: white;
+    font-size: 15px;
+}
+
+.music-search input::placeholder {
+    color: var(--muted);
+}
+
+.music-section-title {
+    max-width: 900px;
+    margin: 0 auto 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.music-section-title h3 {
+    font-size: 20px;
+}
+
+.music-section-title span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+#song-list {
+    max-width: 900px;
+    margin: auto;
+}
+
+.song-row {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 13px;
+    margin-bottom: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 17px;
+}
+
+.song-number {
+    width: 25px;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+}
+
+.song-cover {
+    width: 55px;
+    height: 55px;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, #6d28d9, #b45cff);
+    font-size: 22px;
+}
+
+.song-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.song-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.song-details p {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.song-duration {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.song-play {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: white;
+    color: #111;
+    font-size: 13px;
+}
+
+@media (max-width: 500px) {
+    .song-number {
+        display: none;
+    }
+
+    .song-duration {
+        display: none;
+    }
+
+    .music-screen {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+}
+
+
+
+
+/* ================= MUSIC SCREEN SONG PLAYER ================= */
+
+.song-player {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 99999;
+    background: linear-gradient(180deg, #18151d 0%, #0d0b10 100%);
+    color: white;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
+    padding: 18px 18px 32px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.song-player.active {
+    display: flex;
+}
+
+.player-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 30px;
+}
+
+.player-header span {
+    font-size: 12px;
+    letter-spacing: 2px;
+    opacity: 0.7;
+}
+
+.player-header button {
+    border: none;
+    background: transparent;
+    color: white;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+.player-artwork {
+    width: min(80vw, 360px);
+    aspect-ratio: 1;
+    margin: 0 auto 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 20px;
+    background: #222;
+    font-size: 90px;
+}
+
+.player-info {
+    margin-bottom: 25px;
+}
+
+.player-info h2 {
+    margin: 0 0 6px;
+    font-size: 28px;
+}
+
+.player-info p {
+    margin: 0;
+    opacity: 0.7;
+}
+
+.player-progress input {
+    width: 100%;
+}
+
+.player-times {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    opacity: 0.7;
+    margin-top: 6px;
+}
+
+.player-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 35px;
+    margin: 30px 0;
+}
+
+.player-controls button {
+    border: none;
+    background: transparent;
+    color: white;
+    font-size: 28px;
+    cursor: pointer;
+}
+
+.player-controls .main-play-button {
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    background: white;
+    color: #111;
+    font-size: 25px;
+}
+
+.player-lyrics {
+    margin-top: 10px;
+    padding: 20px;
+    border-radius: 16px;
+    background: #1c1c1c;
+}
+
+.player-lyrics h3 {
+    margin-top: 0;
+}
+
+.player-lyrics p {
+    line-height: 1.7;
+    opacity: 0.8;
+}
+
+
+.player-artwork img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 20px;
+    display: block;
+}
+
+.player-video-container {
+    width: min(90vw, 720px);
+    margin: 0 auto 30px;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #000;
+}
+
+.player-video-container video {
+    width: 100%;
+    max-height: 55vh;
+    display: block;
+    object-fit: contain;
+}
+
+
+/* ================= ARTIST DASHBOARD ================= */
+
+.artist-dashboard {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    overflow-y: auto;
+    padding: 24px 20px 110px;
+    background: #0b0b0f;
+}
+
+.dashboard-header {
+    margin-bottom: 18px;
+}
+
+.dashboard-header h2 {
+    margin: 5px 0;
+}
+
+.dashboard-header p {
+    color: var(--muted);
+    margin: 0;
+}
+
+.dashboard-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 20px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dashboard-card label {
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.dashboard-card input,
+.dashboard-card textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.25);
+    color: white;
+    font: inherit;
+}
+
+.dashboard-card textarea {
+    resize: vertical;
+    min-height: 140px;
+}
+
+.dashboard-card input[type="file"] {
+    padding: 10px;
+}
+
+#save-song-button {
+    margin-top: 15px;
+}
+
+
+/* Developer dashboard is hidden until authentication succeeds */
+#developer-dashboard-header,
+#developer-controls {
+    display: none;
+}
+
+/* ================= DEVELOPER RELEASE LIBRARY ================= */
+
+.developer-release-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.developer-release-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.developer-release-card img {
+    width: 64px;
+    height: 64px;
+    min-width: 64px;
+    object-fit: cover;
+    border-radius: 12px;
+    display: block;
+}
+
+.developer-release-info {
+    min-width: 0;
+}
+
+.developer-release-info h4 {
+    margin: 0 0 4px;
+    font-size: 16px;
+}
+
+.developer-release-info p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.dashboard-empty {
+    color: var(--muted);
+    margin: 0;
+}
+
+
+
+/* ================= PUBLIC PROFILE SCREEN ================= */
+
+.profile-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    overflow-y: auto;
+    padding: 24px 20px 110px;
+    background: #0b0b0f;
+}
+
+.profile-screen.active {
+    display: block;
+}
+
+.profile-header-card {
+    text-align: center;
+    padding: 28px 20px;
+    margin-bottom: 24px;
+}
+
+.profile-avatar {
+    width: 90px;
+    height: 90px;
+    margin: 0 auto 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 42px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.profile-header-card h2 {
+    margin: 0 0 8px;
+}
+
+.profile-header-card p {
+    margin: 0;
+    opacity: 0.7;
+}
+
+.profile-section {
+    margin-top: 20px;
+}
+
+.profile-section h3 {
+    margin: 8px 0 18px;
+}
+
+.social-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.social-stack a {
+    display: block;
+    padding: 14px 16px;
+    border-radius: 12px;
+    text-decoration: none;
+    text-align: center;
+}
+
+/* ================= PROFILE CUSTOMIZATION ================= */
+
+.profile-editor-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 12px 0;
+}
+
+.profile-editor-avatar .profile-avatar-image,
+.profile-editor-avatar .profile-avatar {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.profile-editor-avatar .profile-avatar-image {
+    display: none;
+}
+
+.profile-editor-avatar .profile-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-avatar-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+
+.profile-avatar-image {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+#public-profile-avatar {
+    display: none;
+}
+
+#public-profile-avatar-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#profile-avatar-file {
+    display: block;
+    width: 100%;
+    margin: 10px 0 18px;
+}
+
+#social-links-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 12px 0;
+}
+
+.social-link-editor-row {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.social-link-editor-row input {
+    min-width: 0;
+}
+
+.remove-social-link-button {
+    white-space: nowrap;
+}
+
+#add-social-link-button {
+    margin-bottom: 16px;
+}
+
+#public-social-links {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#public-social-links a {
+    text-decoration: none;
+}
+
+@media (max-width: 600px) {
+    .social-link-editor-row {
+        grid-template-columns: 1fr;
+    }
+
+    .remove-social-link-button {
+        width: 100%;
+    }
+}
+
+
+.dashboard-vault-video {
+    width: 100%;
+    max-width: 420px;
+    display: block;
+    border-radius: 14px;
+    margin-bottom: 14px;
+}
+
+
+.public-reel-video {
+    width: 100%;
+    height: 100%;
+    min-height: 300px;
+    display: block;
+    object-fit: cover;
+    position: relative;
+    z-index: 1;
+}
+
+.public-reel-video + .reel-overlay {
+    pointer-events: none;
+}
+
+
+/* ================= PUBLIC FUN VAULT REELS ================= */
+
+#public-reels-container {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+#public-reels-container .reel-card {
+    min-height: 430px;
+    aspect-ratio: 9 / 16;
+    background: #080808;
+    overflow: hidden;
+}
+
+#public-reels-container .public-reel-video {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    object-fit: cover;
+    background: #000;
+}
+
+#public-reels-container .reel-overlay {
+    z-index: 2;
+    pointer-events: none;
+    padding: 18px;
+}
+
+#public-reels-container .reel-overlay h3 {
+    font-size: 18px;
+    margin: 6px 0;
+}
+
+#public-reels-container .reel-overlay p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+@media (max-width: 700px) {
+    #public-reels-container {
+        display: flex;
+        overflow-x: auto;
+        gap: 12px;
+        scroll-snap-type: x mandatory;
+        padding-bottom: 8px;
+    }
+
+    #public-reels-container .reel-card {
+        flex: 0 0 230px;
+        min-height: 410px;
+        scroll-snap-align: start;
+    }
+}
+
+
+/* ================= FAN VAULT BEHIND-THE-SCENES REELS ================= */
+
+/* ================= FAN VAULT TIKTOK REEL LAYOUT ================= */
+#fan-vault-screen .reels-container {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 16px;
+    width: 100%;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
+    padding-bottom: 10px;
+
+}
+
+#fan-vault-screen .reels-container .reel-card {
+    flex: 0 0 85%;
+    scroll-snap-align: start;
+}
+
+#fan-vault-screen .reel-card {
+    width: min(100%, 430px);
+    height: calc(100vh - 120px);
+    min-height: 0;
+    flex: 0 0 calc(100vh - 120px);
+    background: #080808;
+    overflow: hidden;
+    position: relative;
+    border-radius: 16px;
+    scroll-snap-align: start;
+}
+
+#fan-vault-screen .reel-video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    background: #000;
+}
+
+#fan-vault-screen .reel-info {
+    position: absolute;
+    left: 0;
+    right: 70px;
+    bottom: 0;
+    z-index: 2;
+    padding: 22px 16px;
+    background: linear-gradient(transparent, rgba(0,0,0,.9));
+    pointer-events: none;
+}
+
+#fan-vault-screen .reel-info h3 {
+    margin: 0 0 6px;
+    font-size: 18px;
+}
+
+#fan-vault-screen .reel-info p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+#fan-vault-screen .reel-engagement {
+    position: absolute;
+    right: 10px;
+    bottom: 24px;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+#fan-vault-screen .reel-engagement button {
+    width: 48px;
+    min-height: 48px;
+    padding: 5px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+}
+
+#fan-vault-screen .reel-engagement button:first-child {
+    font-size: 18px;
+}
+
+#fan-vault-screen .reel-engagement button:hover {
+    background: rgba(255,255,255,.18);
+}
+
+@media (max-width: 700px) {
+#fan-vault-screen .reels-container {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 16px;
+    width: 100%;
+    height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
+}
+
+#fan-vault-screen .reels-container .reel-card {
+    flex: 0 0 85%;
+    scroll-snap-align: start;
+}
+
+/* FAN VAULT TOP BACK BUTTON */
+#fan-vault-screen .fan-vault-top-back {
+    position: sticky;
+    top: 12px;
+    z-index: 100;
+    margin-bottom: 18px;
+}
+
+/* ================= FAN VAULT ENGAGEMENT CLICK FIX ================= */
+
+#fan-vault-screen .reel-engagement {
+    position: absolute;
+    right: 10px;
+    bottom: 24px;
+    z-index: 20;
+    pointer-events: auto;
+}
+
+#fan-vault-screen .reel-engagement button {
+    position: relative;
+    z-index: 21;
+    pointer-events: auto;
+    touch-action: manipulation;
+}
+
+#fan-vault-screen .reel-video {
+    position: relative;
+    z-index: 1;
+}
+
+
+/* ================= FAN VAULT COMMENTS PANEL ================= */
+
+#fan-vault-comments-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+}
+
+#fan-vault-comments-panel.active {
+    display: block;
+}
+
+.fan-vault-comments-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.65);
+}
+
+.fan-vault-comments-sheet {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(100%, 430px);
+    max-height: 70vh;
+    background: #111;
+    color: #fff;
+    border-radius: 20px 20px 0 0;
+    overflow-y: auto;
+    padding-bottom: 20px;
+}
+
+.fan-vault-comments-header {
+    position: sticky;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background: #111;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+}
+
+.fan-vault-comments-header button {
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.fan-vault-comment-item {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.fan-vault-comment-item p {
+    margin: 0;
+    line-height: 1.4;
+}
+
+.fan-vault-no-comments {
+    padding: 30px 16px;
+    text-align: center;
+    opacity: .7;
+}
+
+/* ================= MERCH CHECKOUT ================= */
+
+#merch-checkout-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+}
+
+#merch-checkout-panel.active {
+    display: block;
+}
+
+.merch-checkout-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+}
+
+.merch-checkout-sheet {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: min(100%, 560px);
+    max-height: 92vh;
+    overflow-y: auto;
+    transform: translateX(-50%);
+    background: #111;
+    border-radius: 24px 24px 0 0;
+    padding: 22px;
+    box-sizing: border-box;
+}
+
+.merch-checkout-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.merch-checkout-header h3 {
+    margin: 4px 0 0;
+}
+
+.merch-checkout-header button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+.merch-checkout-product {
+    padding: 16px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.06);
+    margin-bottom: 20px;
+}
+
+.merch-checkout-product h4 {
+    margin: 0 0 6px;
+}
+
+.merch-checkout-product p {
+    margin: 0;
+    opacity: 0.75;
+}
+
+#merch-checkout-form {
+    display: grid;
+    gap: 14px;
+}
+
+#merch-checkout-form label {
+    display: grid;
+    gap: 7px;
+    font-size: 14px;
+}
+
+#merch-checkout-form input,
+#merch-checkout-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    font: inherit;
+}
+
+.merch-payment-methods {
+    display: grid;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.merch-payment-option {
+    display: flex !important;
+    grid-template-columns: auto 1fr !important;
+    align-items: center;
+    gap: 10px !important;
+    padding: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    cursor: pointer;
+}
+
+.merch-payment-option input {
+    width: auto !important;
+}
+
+.merch-checkout-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    font-size: 18px;
+}
+
+.merch-checkout-total strong {
+    font-size: 20px;
+}
+
+
+/* ================= MERCH ORDER CONFIRMATION ================= */
+
+#merch-order-confirmation {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+}
+
+#merch-order-confirmation.active {
+    display: block;
+}
+
+.merch-confirmation-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+}
+
+.merch-confirmation-sheet {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: min(92%, 480px);
+    max-height: 90vh;
+    overflow-y: auto;
+    transform: translate(-50%, -50%);
+    box-sizing: border-box;
+    padding: 28px;
+    border-radius: 24px;
+    background: #111;
+    text-align: center;
+}
+
+.merch-confirmation-icon {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 16px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    font-size: 30px;
+}
+
+.merch-confirmation-sheet h3 {
+    margin: 8px 0;
+}
+
+.merch-confirmation-sheet > p {
+    opacity: 0.75;
+    margin-bottom: 22px;
+}
+
+.merch-confirmation-details {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 24px;
+    text-align: left;
+}
+
+.merch-confirmation-details div {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.merch-confirmation-details span {
+    opacity: 0.65;
+}
+
+.merch-confirmation-details strong {
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+
+/* ================= FAN VAULT LIVE ================= */
+
+.fan-vault-live-section {
+    margin-top: 18px;
+}
+
+.fan-vault-live-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.fan-vault-live-header h3 {
+    margin: 4px 0;
+}
+
+.fan-vault-live-header p {
+    margin: 0;
+    opacity: 0.7;
+}
+
+.fan-vault-live-badge {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.fan-vault-live-badge.live {
+    background: rgba(255, 0, 0, 0.18);
+}
+
+.fan-vault-live-player {
+    min-height: 190px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 18px;
+    background: #080808;
+}
+
+.fan-vault-live-placeholder {
+    display: grid;
+    gap: 7px;
+    place-items: center;
+    text-align: center;
+    padding: 30px;
+    opacity: 0.75;
+}
+
+.fan-vault-live-placeholder span {
+    font-size: 34px;
+}
+
+.fan-vault-live-placeholder strong {
+    font-size: 16px;
+}
+
+.fan-vault-live-placeholder small {
+    opacity: 0.7;
+}
+
+.fan-vault-live-player iframe,
+.fan-vault-live-player video {
+    width: 100%;
+    height: 100%;
+    min-height: 190px;
+    border: 0;
+    object-fit: cover;
+}
+
+
+/* ================= FAN VAULT UPCOMING EVENTS ================= */
+
+.fan-vault-upcoming-events {
+    margin-top: 24px;
+}
+
+.fan-vault-event-card {
+    display: block;
+    width: 100%;
+    padding: 0;
+    margin-bottom: 20px;
+    overflow: hidden;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-sizing: border-box;
+}
+
+.fan-vault-event-card > img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    height: auto;
+    object-fit: cover;
+    border: 0;
+}
+
+.fan-vault-event-card .concert-date {
+    padding: 16px 18px 0;
+    text-align: left;
+}
+
+.fan-vault-event-card .concert-date strong {
+    display: inline-block;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.fan-vault-event-card .concert-date span {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    opacity: 0.75;
+}
+
+.fan-vault-event-card .concert-info {
+    padding: 10px 18px 18px;
+}
+
+.fan-vault-event-card .concert-info > span {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    opacity: 0.75;
+}
+
+.fan-vault-event-card .concert-info h3 {
+    margin: 0 0 10px;
+    font-size: 21px;
+    line-height: 1.25;
+}
+
+.fan-vault-event-card .concert-info p {
+    margin: 0 0 9px;
+    font-size: 14px;
+    line-height: 1.5;
+    opacity: 0.9;
+}
+
+.fan-vault-event-card .fan-vault-reminder-btn {
+    margin-top: 6px;
+    width: 100%;
+}
+
+
+
+.fan-vault-event-date {
+    min-width: 78px;
+    text-align: center;
+    padding: 10px 8px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.fan-vault-event-date strong {
+    display: block;
+    font-size: 14px;
+}
+
+.fan-vault-event-date span {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+.fan-vault-event-info {
+    flex: 1;
+}
+
+.fan-vault-event-info h4 {
+    margin: 0 0 6px;
+}
+
+.fan-vault-event-info p {
+    margin: 0 0 8px;
+    opacity: 0.8;
+    font-size: 14px;
+}
+
+.fan-vault-event-countdown {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.fan-vault-reminder-btn {
+    font-size: 13px;
+}
+
+@media (max-width: 520px) {
+    .fan-vault-event-card {
+        align-items: flex-start;
+    }
+
+    .fan-vault-event-date {
+        min-width: 68px;
+    }
+}
+
+
+/* ================= FAN VAULT EVENT DETAILS ================= */
+
+#fan-vault-event-details-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+}
+
+#fan-vault-event-details-panel.active {
+    display: block;
+}
+
+.fan-vault-event-details-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+}
+
+.fan-vault-event-details-sheet {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: min(100%, 520px);
+    transform: translateX(-50%);
+    padding: 22px;
+    border-radius: 24px 24px 0 0;
+    background: #111;
+    box-sizing: border-box;
+}
+
+.fan-vault-event-details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.fan-vault-event-details-header h3 {
+    margin: 6px 0 0;
+}
+
+.fan-vault-event-details-header button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+.fan-vault-event-details-body {
+    margin: 22px 0;
+}
+
+.fan-vault-event-details-live {
+    margin-bottom: 16px;
+    font-weight: 700;
+}
+
+.fan-vault-event-details-date {
+    padding: 14px;
+    margin-bottom: 16px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.fan-vault-event-details-date strong,
+.fan-vault-event-details-date span {
+    display: block;
+}
+
+.fan-vault-event-details-date span {
+    margin-top: 5px;
+    opacity: 0.75;
+}
+
+.fan-vault-event-details-description {
+    line-height: 1.6;
+    opacity: 0.85;
+}
+
+.fan-vault-event-details-countdown {
+    margin-top: 18px;
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+
+/* ================= HOME FEATURED SONG ARTWORK ================= */
+
+.featured-song .song-art {
+    width: 72px;
+    height: 72px;
+    min-width: 72px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+.featured-song .song-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 12px;
+}
+
+/* Ensure Music Screen Song Player fills the entire viewport */
+.song-player {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+}
+
+
+/* ================= SPOTIFY-STYLE MUSIC PLAYER ================= */
+
+.music-screen {
+    position: fixed;
+    inset: 0;
+    overflow-y: auto;
+}
+
+.song-player {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    z-index: 10 !important;
+    padding: 24px 20px 110px !important;
+    border-radius: 0 !important;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.song-player.active {
+    display: flex;
+}
+
+.player-artwork {
+    width: min(82vw, 380px);
+    aspect-ratio: 1;
+    margin: 10px auto 28px;
+    flex-shrink: 0;
+}
+
+.player-artwork #player-cover {
+    width: 100%;
+    height: 100%;
+}
+
+.player-info {
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 24px;
+}
+
+.player-info h2 {
+    font-size: 28px;
+    margin-bottom: 6px;
+}
+
+.player-info p {
+    font-size: 16px;
+    opacity: 0.7;
+}
+
+.player-progress {
+    width: 100%;
+    max-width: 600px;
+}
+
+.player-controls {
+    width: 100%;
+    max-width: 600px;
+    margin: 28px 0;
+}
+
+.player-lyrics {
+    width: 100%;
+    max-width: 600px;
+    box-sizing: border-box;
+}
+
+
+/* ================= VIDEO REPLACES COVER ART ================= */
+
+#player-media {
+    width: min(80vw, 360px);
+    aspect-ratio: 1;
+    margin: 0 auto 30px;
+    border-radius: 20px;
+    overflow: hidden;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#player-media #player-cover {
+    width: 100%;
+    height: 100%;
+}
+
+#player-media #player-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 20px;
+}
+
+/* ================= APP LIVE CAMERA ================= */
+
+.app-live-camera {
+    margin-bottom: 20px;
+}
+
+#app-live-preview {
+    width: 100%;
+    max-height: 420px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    background: #000;
+    border-radius: 18px;
+}
+
+.app-live-camera-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.app-live-camera-actions button {
+    flex: 1;
+}
+
+#app-live-preview-message {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+
+/* EDEN LIVE FULLSCREEN */
+#fan-vault-live-player.eden-live-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    background: #000;
+    border-radius: 0;
+}
+
+#fan-vault-live-player.eden-live-fullscreen video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 0 !important;
+}
+
+#fan-vault-live-player.eden-live-fullscreen .fan-vault-live-placeholder {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* EDEN ARTIST LIVE FULLSCREEN */
+body.eden-live-body #app-live-preview {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    width: 100vw !important;
+    height: 100vh !important;
+    object-fit: cover;
+    background: #000;
+    border-radius: 0 !important;
+}
+
+/* ================= EDEN TIKTOK-STYLE LIVE ================= */
+
+body.eden-live-body {
+    overflow: hidden;
+}
+
+body.eden-live-body #app-live-preview,
+body.eden-live-body #fan-vault-live-video {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    object-fit: cover !important;
+    background: #000 !important;
+}
+
+body.eden-live-body #fan-vault-live-player {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9998 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    background: #000 !important;
+}
+
+body.eden-live-body #fan-vault-live-player video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    border-radius: 0 !important;
+}
+
+body.eden-live-body #app-live-preview {
+    z-index: 9999 !important;
+}
+
+body.eden-live-body #fan-vault-live-player {
+    z-index: 9999 !important;
+}
+
+/* TikTok-style edge gradient */
+body.eden-live-body #app-live-preview::after,
+body.eden-live-body #fan-vault-live-player::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(0,0,0,.45),
+            transparent 25%,
+            transparent 60%,
+            rgba(0,0,0,.7)
+        );
+    z-index: 10000;
+}
+
+/* EDEN LIVE COMMENTS */
+body.eden-live-body #eden-live-comments {
+    position: fixed;
+    left: 16px;
+    bottom: 82px;
+    z-index: 10002;
+    width: min(420px, calc(100vw - 32px));
+    max-height: 42vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+body.eden-live-body .eden-live-comment {
+    width: fit-content;
+    max-width: 90%;
+    padding: 8px 12px;
+    border-radius: 16px;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-size: 14px;
+    backdrop-filter: blur(6px);
+}
+
+body.eden-live-body .eden-live-comment strong {
+    margin-right: 5px;
+}
+
+body.eden-live-body #eden-live-comment-form {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 18px;
+    z-index: 10003;
+    display: flex;
+    gap: 8px;
+}
+
+body.eden-live-body #eden-live-comment-input {
+    flex: 1;
+    min-width: 0;
+    height: 46px;
+    padding: 0 16px;
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 24px;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    outline: none;
+    backdrop-filter: blur(8px);
+}
+
+body.eden-live-body #eden-live-comment-input::placeholder {
+    color: rgba(255,255,255,.75);
+}
+
+body.eden-live-body #eden-live-comment-form button {
+    width: 46px;
+    height: 46px;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+#eden-live-comment-form,
+#eden-live-comments {
+    display: none;
+}
+
+body.eden-live-active #eden-live-comment-form,
+body.eden-live-active #eden-live-comments {
+    display: flex;
+}
+
+.eden-live-comment {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 0;
+    color: #fff;
+    font-size: 14px;
+}
+
+.eden-live-comment strong {
+    font-size: 13px;
+}
+
+.eden-live-comment.reply {
+    margin-left: 28px;
+    opacity: 0.9;
+}
+
+.eden-live-comment-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.eden-live-reply-btn {
+    border: 0;
+    background: transparent;
+    color: rgba(255,255,255,0.7);
+    font-size: 11px;
+    padding: 0;
+    cursor: pointer;
+}
+
+#fan-vault-live-player {
+    position: relative;
+    overflow: hidden;
+    background: #000;
+}
+
+#eden-live-comments {
+    position: absolute;
+    left: 16px;
+    bottom: 70px;
+    width: min(78%, 420px);
+    max-height: 42%;
+    overflow-y: auto;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    z-index: 20;
+    scrollbar-width: none;
+}
+
+#eden-live-comments::-webkit-scrollbar {
+    display: none;
+}
+
+.eden-live-comment {
+    width: fit-content;
+    max-width: 100%;
+    padding: 5px 10px;
+    border-radius: 16px;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(4px);
+}
+
+.eden-live-comment strong {
+    margin-right: 6px;
+}
+
+#eden-live-comment-form {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    z-index: 21;
+    display: none;
+    gap: 8px;
+}
+
+#eden-live-comment-input {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 15px;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 24px;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    outline: none;
+}
+
+#eden-live-comment-form button {
+    width: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: #fff;
+    color: #000;
+    cursor: pointer;
+    font-size: 17px;
+}
+
+body.eden-live-active #eden-live-comments,
+body.eden-live-active #eden-live-comment-form {
+    display: flex;
+}
+
+.eden-live-control-button {
+    position: absolute;
+    top: 16px;
+    z-index: 30;
+    border: 0;
+    border-radius: 20px;
+    padding: 9px 15px;
+    font-weight: 700;
+    cursor: pointer;
+    display: none;
+}
+
+.eden-live-end-button {
+    right: 16px;
+    background: #ff3040;
+    color: #fff;
+}
+
+.eden-live-exit-button {
+    left: 16px;
+    background: rgba(0,0,0,0.65);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.25);
+}
+
+body.eden-live-active.eden-live-artist
+    #eden-live-end-button {
+    display: block;
+}
+
+body.eden-live-active.eden-live-fan
+    #eden-live-exit-button {
+    display: block;
+}
+
+/* ================= TIKTOK REEL VIEWER ================= */
+
+.tiktok-reel-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: none;
+    background: #000;
+}
+
+.tiktok-reel-viewer.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tiktok-reel-video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+
+.tiktok-reel-gradient {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(
+            to top,
+            rgba(0,0,0,.85),
+            transparent 35%
+        );
+}
+
+.tiktok-reel-close {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    z-index: 3;
+    width: 42px;
+    height: 42px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.tiktok-reel-info {
+    position: absolute;
+    left: 18px;
+    right: 85px;
+    bottom: 28px;
+    z-index: 3;
+    color: #fff;
+}
+
+.tiktok-reel-info strong {
+    display: block;
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+
+.tiktok-reel-info p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.tiktok-reel-actions {
+    position: absolute;
+    right: 16px;
+    bottom: 28px;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.tiktok-reel-actions button {
+    width: 48px;
+    height: 48px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+@media (max-width: 700px) {
+    .tiktok-reel-video {
+        object-fit: cover;
+    }
+}
+
+
+/* ================= TIKTOK VIEWER FEED TRANSITION ================= */
+
+#tiktok-reel-viewer .tiktok-reel-video {
+    transition: transform 220ms ease, opacity 220ms ease;
+}
+
+#tiktok-reel-viewer.tiktok-reel-changing .tiktok-reel-video {
+    opacity: 0;
+    transform: translateY(24px);
+}
+
+
+#eden-connection-status {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 99999;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+.eden-connection-online {
+    background: #1f8f4c;
+    color: #ffffff;
+}
+
+.eden-connection-offline {
+    background: #b3261e;
+    color: #ffffff;
+}
+
+#eden-launcher-icon-controls {
+    margin: 16px;
+    padding: 16px;
+    border-radius: 12px;
+}
+
+#eden-launcher-icon-controls input,
+#eden-launcher-icon-controls button {
+    margin: 6px 0;
+}
+
+#eden-launcher-icon-status {
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+/* EDEN LIVE CONTROLS ABOVE FULLSCREEN VIDEO */
+body.eden-live-body .eden-live-control-button {
+    position: fixed !important;
+    z-index: 10005 !important;
+}
+
+body.eden-live-body .eden-live-end-button {
+    top: 20px !important;
+    right: 20px !important;
+}
+
+body.eden-live-body .eden-live-exit-button {
+    top: 20px !important;
+    left: 20px !important;
+}
+
+
+/* EDEN ARTIST LIVE UI */
+body.eden-live-body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    pointer-events: none;
+    background: linear-gradient(
+        to bottom,
+        rgba(0,0,0,.35),
+        transparent 25%,
+        transparent 65%,
+        rgba(0,0,0,.65)
+    );
+}
+
+body.eden-live-body #app-live-preview {
+    z-index: 9999 !important;
+}
+
+body.eden-live-body #fan-vault-live-player {
+    z-index: 10001 !important;
+    pointer-events: none;
+}
+
+body.eden-live-body .eden-live-control-button,
+body.eden-live-body #eden-live-comments,
+body.eden-live-body #eden-live-comment-form {
+    z-index: 10002 !important;
+    pointer-events: auto !important;
+}
+
+body.eden-live-body .eden-live-end-button {
+    position: fixed !important;
+    top: 20px !important;
+    right: 20px !important;
+}
+
+body.eden-live-body .eden-live-exit-button {
+    position: fixed !important;
+    top: 20px !important;
+    left: 20px !important;
+}
+
+
+/* EDEN ARTIST LIVE OVERLAY */
+#eden-artist-live-overlay {
+    display: none;
+}
+
+body.eden-live-body #eden-artist-live-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 10005;
+    pointer-events: none;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 24px 18px;
+    box-sizing: border-box;
+}
+
+body.eden-live-body #eden-artist-live-overlay button {
+    pointer-events: auto;
+    border: 0;
+    border-radius: 22px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#eden-artist-live-exit {
+    align-self: flex-start;
+}
+
+#eden-artist-live-status {
+    align-self: center;
+    padding: 8px 14px;
+    border-radius: 20px;
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-weight: 700;
+}
+
+#eden-artist-live-end {
+    align-self: flex-end;
+}
+
+body.eden-live-body .app-live-camera-actions,
+body.eden-live-body #app-live-preview-message {
+    display: none !important;
+}
+
+
+body.eden-live-body #eden-artist-live-end {
+    display: block !important;
+    position: fixed !important;
+    right: 18px !important;
+    bottom: 24px !important;
+    z-index: 10020 !important;
+    background: rgba(220, 0, 0, 0.9) !important;
+    color: #fff !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+body.eden-live-body #eden-artist-live-exit {
+    display: block !important;
+    position: fixed !important;
+    left: 18px !important;
+    top: 24px !important;
+    z-index: 10020 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+
+/* Keep artist live controls above fullscreen video */
+body.eden-live-body #eden-artist-live-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 10010 !important;
+    pointer-events: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    padding: 24px !important;
+    box-sizing: border-box !important;
+}
+
+body.eden-live-body #eden-artist-live-overlay button {
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 10011 !important;
+}
+
+body.eden-live-body #eden-artist-live-end,
+body.eden-live-body #eden-artist-live-exit {
+    display: block !important;
+}
+
+/* ================= FAN VAULT DASHBOARD LIBRARY ================= */
+
+#fun-vault-list .developer-release-card {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    padding: 13px;
+    margin-bottom: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 17px;
+}
+
+#fun-vault-list .dashboard-vault-video {
+    width: 55px;
+    height: 55px;
+    flex: 0 0 55px;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+#fun-vault-list .developer-release-card > div:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+}
+
+#fun-vault-list .developer-release-card h3 {
+    margin: 3px 0;
+}
+
+#fun-vault-list .developer-release-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#fun-vault-list .live-control-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+
+/* ================= ARTIST DASHBOARD SECTION NAVIGATION ================= */
+
+.developer-dashboard-menu {
+    max-width: 900px;
+    margin: 20px auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.developer-dashboard-menu-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    text-align: left;
+    color: inherit;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 17px;
+    cursor: pointer;
+    transition: transform .15s ease, background .15s ease;
+}
+
+.developer-dashboard-menu-row:hover {
+    transform: translateY(-1px);
+    background: rgba(255,255,255,.05);
+}
+
+.developer-dashboard-menu-icon {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 42px;
+    border-radius: 13px;
+    background: rgba(255,255,255,.08);
+    font-size: 20px;
+}
+
+.developer-dashboard-menu-row > span:nth-child(2) {
+    min-width: 0;
+    flex: 1;
+}
+
+.developer-dashboard-menu-row strong {
+    display: block;
+    font-size: 15px;
+}
+
+.developer-dashboard-menu-row small {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.developer-dashboard-menu-arrow {
+    color: var(--muted);
+    font-size: 25px;
+}
+
+.developer-dashboard-section {
+    display: none;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.developer-dashboard-section.active {
+    display: block;
+}
+
+.developer-dashboard-back {
+    max-width: 900px;
+    margin: 0 auto 18px;
+}
+
+.developer-dashboard-back h2 {
+    margin: 14px 0 0;
+}
+
+
+/* ================= ARTIST DASHBOARD MENU ================= */
+
+.developer-dashboard-menu {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.developer-dashboard-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 17px;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    transition: transform .15s ease, background .15s ease;
+}
+
+.developer-dashboard-menu-item:hover {
+    transform: translateY(-1px);
+    background: var(--surface-hover, var(--surface));
+}
+
+.developer-dashboard-menu-item > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.developer-dashboard-menu-item strong {
+    font-size: 16px;
+}
+
+.developer-dashboard-menu-item small {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.developer-dashboard-menu-arrow {
+    flex: 0 0 auto;
+}
+
+.developer-dashboard-back {
+    max-width: 900px;
+    margin: 0 auto 18px;
+}
+
+.developer-dashboard-back h2 {
+    margin: 14px 0 0;
+}
+
+/* ================= FAN VAULT SQUARE EVENT CARDS ================= */
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card > img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    height: auto;
+    object-fit: cover;
+    border: 0;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-date {
+    margin: 16px 16px 0;
+    padding: 0;
+    text-align: left;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-date strong {
+    font-size: 28px;
+    line-height: 1;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-date span {
+    margin-left: 8px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-info {
+    padding: 12px 16px 18px;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-info > span,
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-info > p,
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-info > h3 {
+    display: block;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-info h3 {
+    margin: 8px 0 10px;
+    font-size: 22px;
+    line-height: 1.2;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-info p {
+    margin: 8px 0;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .concert-info > span {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+#fan-vault-upcoming-events-grid .fan-vault-event-card .fan-vault-reminder-btn {
+    width: 100%;
+    margin-top: 12px;
+    font-size: 15px;
+    padding: 12px 16px;
+}
+
+@media (max-width: 700px) {
+    #fan-vault-upcoming-events-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 18px;
+    }
+}
+
+@media (min-width: 701px) {
+    #fan-vault-upcoming-events-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+    }
+}

@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eden Music</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div id="eden-offline-gate" class="eden-offline-gate" style="display:none;">
+    <div class="eden-offline-card">
+        <span class="eyebrow">EDEN MUSIC</span>
+        <div class="eden-offline-icon">☁️</div>
+        <h2>You are offline</h2>
+        <p>Eden Music requires an internet connection. Please reconnect to continue.</p>
+        <button type="button" class="primary-btn" onclick="location.reload()">Try Again</button>
+    </div>
+</div>
+
+<div class="app">
+
+    <!-- ================= HEADER ================= -->
+    <header class="top-bar">
+        <div>
+            <h1>Eden Music</h1>
+            <p>Welcome to the inner circle.</p>
+        </div>
+
+        <button class="notification-btn" onclick="openNotifications()">
+            🔔
+        </button>
+    </header>
+
+
+    <!-- ================= ACCOUNT / GUEST ================= -->
+    <section id="welcome-card" class="welcome-card">
+
+        <div class="welcome-text">
+            <span class="eyebrow">WELCOME</span>
+            <h2>Follow the journey.</h2>
+            <p>
+                Create an account to unlock the Fan Vault,
+                follow Eden's journey and stay connected.
+            </p>
+        </div>
+
+        <div class="account-actions">
+            <button class="primary-btn" onclick="navigateVault()">
+                Create Account
+            </button>
+
+            <button class="secondary-btn" onclick="showMessage('Guest mode activated.')">
+                Continue as Guest
+            </button>
+        </div>
+
+    </section>
+
+
+    <!-- ================= FEATURED MUSIC ================= -->
+    <section class="section">
+
+        <div class="section-heading">
+            <div>
+                <span class="eyebrow">MUSIC</span>
+                <h2>Featured</h2>
+            </div>
+
+            <button class="text-btn" onclick="showMessage('Music section coming next.')">
+                See all
+            </button>
+        </div>
+
+        <div class="featured-song">
+
+            <div class="song-art">
+                🎵
+            </div>
+
+            <div class="song-info">
+                <span>Latest Release</span>
+                <h3>Eden Music</h3>
+                <p>Play the latest song</p>
+            </div>
+
+            <button class="play-btn" type="button">
+                ▶
+            </button>
+
+        </div>
+
+    </section>
+
+
+    <!-- ================= REELS ================= -->
+<section class="section">
+
+    <div class="section-heading">
+        <div>
+            <span class="eyebrow">BEHIND THE SCENES</span>
+            <h2>Reels</h2>
+        </div>
+
+        <span class="small-label">Guest: 5 videos</span>
+    </div>
+
+    <div id="public-reels-container" class="reels-container">
+        <p class="dashboard-empty">Loading reels...</p>
+    </div>
+
+</section>
+
+
+<!-- ================= FAN VAULT PREVIEW ================= -->
+    <section class="vault-card">
+
+        <div class="vault-icon">🔐</div>
+
+        <div>
+            <span class="eyebrow">EXCLUSIVE</span>
+            <h2>Fan Vault</h2>
+            <p>
+                Behind-the-scenes videos, exclusive updates,
+                live moments, merchandise and more.
+            </p>
+        </div>
+
+        <button
+            class="primary-btn"
+            onclick="openFanVault()">
+            <span id="fan-vault-entry-label">Enter Vault</span>
+        </button>
+
+    </section>
+
+
+    <!-- ================= UPCOMING EVENTS ================= -->
+    <section class="section">
+
+        <div class="section-heading">
+            <div>
+                <span class="eyebrow">EVENTS</span>
+            <h2>Upcoming Events</h2>
+            </div>
+
+            <button
+                class="text-btn"
+                onclick="openFanVaultUpcomingEvents()">
+                View all
+            </button>
+        </div>
+
+        <div id="home-upcoming-events">
+            <p class="dashboard-empty">Loading upcoming events...</p>
+        </div>
+
+    </section>
+
+
+
+
+<!-- ================= ARTIST DASHBOARD ================= -->
+<section id="artist-dashboard" class="artist-dashboard">
+
+    <button class="secondary-btn" onclick="closeDeveloperDashboard()">← Back to Profile</button>
+
+    <div id="developer-login" class="dashboard-card">
+        <span class="eyebrow">DEVELOPER ACCESS</span>
+        <h3>Artist Dashboard</h3>
+        <p>Sign in to manage Eden Music releases.</p>
+
+        <label for="developer-email">Email</label>
+        <input id="developer-email" type="email" placeholder="Developer email" autocomplete="email">
+
+        <label for="developer-password">Password</label>
+        <input id="developer-password" type="password" placeholder="Password" autocomplete="current-password">
+
+        <button id="developer-login-button" class="primary-btn" onclick="developerLogin()">
+            Developer Login
+        </button>
+
+        <p id="developer-login-message"></p>
+    </div>
+
+    <div id="developer-dashboard-header" class="dashboard-header">
+        <div>
+            <span class="eyebrow">DEVELOPER</span>
+            <h2>Artist Dashboard</h2>
+            <p>Manage Eden Music releases.</p>
+        </div>
+    </div>
+
+    <div id="developer-dashboard-back" class="developer-dashboard-back" style="display:none;"><button type="button" class="secondary-btn" onclick="closeDeveloperDashboardSection()">← Back to Dashboard</button><h2 id="developer-dashboard-section-title"></h2></div>
+
+<div id="developer-dashboard-menu" class="developer-dashboard-menu">
+    <button type="button" class="developer-dashboard-menu-item" onclick="openDeveloperDashboardSection('songs')"><div><span class="eyebrow">MUSIC</span><strong>Song Management</strong><small>Upload and manage your music library.</small></div><span class="developer-dashboard-menu-arrow">›</span></button>
+    <button type="button" class="developer-dashboard-menu-item" onclick="openDeveloperDashboardSection('videos')"><div><span class="eyebrow">VIDEO</span><strong>Video Management</strong><small>Upload and manage exclusive videos.</small></div><span class="developer-dashboard-menu-arrow">›</span></button>
+    <button type="button" class="developer-dashboard-menu-item" onclick="openDeveloperDashboardSection('linked')"><div><span class="eyebrow">CONTENT</span><strong>Linked Account Content</strong><small>Review and manage linked social content.</small></div><span class="developer-dashboard-menu-arrow">›</span></button>
+    <button type="button" class="developer-dashboard-menu-item" onclick="openDeveloperDashboardSection('live')"><div><span class="eyebrow">LIVE</span><strong>Live Event Management</strong><small>Create and control live events.</small></div><span class="developer-dashboard-menu-arrow">›</span></button>
+    <button type="button" class="developer-dashboard-menu-item" onclick="openDeveloperDashboardSection('merch')"><div><span class="eyebrow">STORE</span><strong>Merchandise Management</strong><small>Add and manage Eden Music merchandise.</small></div><span class="developer-dashboard-menu-arrow">›</span></button>
+    <button type="button" class="developer-dashboard-menu-item" onclick="openDeveloperDashboardSection('profile')"><div><span class="eyebrow">PROFILE</span><strong>Profile Editing</strong><small>Update the public artist profile.</small></div><span class="developer-dashboard-menu-arrow">›</span></button>
+</div>
+
+<div id="developer-dashboard-section-songs" class="developer-dashboard-section"><div id="developer-controls" class="dashboard-card">
+
+        <label for="song-title-input">Song Title</label>
+        <input id="song-title-input" type="text" placeholder="Enter song title">
+
+        <label for="song-artist-input">Artist</label>
+        <input id="song-artist-input" type="text" placeholder="Eden" value="Eden">
+
+        <label for="song-audio-input">Audio File</label>
+        <input id="song-audio-input" type="file" accept="audio/*">
+
+        <label for="song-cover-input">Cover Artwork</label>
+        <input id="song-cover-input" type="file" accept="image/*">
+
+        <label for="song-video-input">Music Video</label>
+        <input id="song-video-input" type="file" accept="video/*">
+
+        <label for="song-lyrics-input">Lyrics</label>
+        <textarea id="song-lyrics-input" rows="8" placeholder="Enter lyrics here..."></textarea>
+
+        <button id="save-song-button" class="primary-btn" onclick="saveSongToSupabase()">
+            Save Song
+        </button>
+
+    </div>
+
+    <div class="dashboard-header">
+        <div>
+            <span class="eyebrow">RELEASES</span>
+            <h3>Your Music Library</h3>
+            <p>Manage songs currently published in Eden Music.</p>
+        </div>
+    </div>
+
+    <div id="developer-release-list" class="developer-release-list">
+        <p class="dashboard-empty">Loading releases...</p>
+    </div></div>
+
+    <div id="developer-dashboard-section-videos" class="developer-dashboard-section"><div class="dashboard-header">
+        <div>
+            <span class="eyebrow">FUN VAULT</span>
+            <h3>Fun Vault Videos</h3>
+            <p>Upload and manage exclusive videos for your fans.</p>
+        </div>
+    </div>
+
+    <div id="fun-vault-controls" class="dashboard-card">
+
+        <label for="fun-vault-title">Video Title</label>
+        <input
+            id="fun-vault-title"
+            type="text"
+            placeholder="Enter video title"
+        >
+
+        <label for="fun-vault-description">Description</label>
+        <textarea
+            id="fun-vault-description"
+            rows="4"
+            placeholder="Tell fans about this video..."
+        ></textarea>
+
+        <label for="fun-vault-video-input">Video File</label>
+        <input
+            id="fun-vault-video-input"
+            type="file"
+            accept="video/*"
+        >
+
+        <label class="checkbox-row">
+            <input
+                id="fun-vault-published"
+                type="checkbox"
+                checked
+            >
+            Publish immediately
+        </label>
+
+        <button
+            id="save-fun-vault-button"
+            class="primary-btn"
+            onclick="saveFunVaultVideo()"
+        >
+            Upload Fun Vault Video
+        </button>
+
+        <p id="fun-vault-save-message"></p>
+    </div>
+
+    <div class="dashboard-header">
+        <div>
+            <span class="eyebrow">FUN VAULT LIBRARY</span>
+            <h3>Your Exclusive Videos</h3>
+            <p>Manage videos currently available in the Fun Vault.</p>
+        </div>
+    </div>
+
+    <div id="fun-vault-list" class="developer-release-list">
+        <p class="dashboard-empty">Loading Fun Vault videos...</p>
+    </div></div>
+
+    <div id="developer-dashboard-section-linked" class="developer-dashboard-section"><div class="dashboard-header">
+        <div>
+            <span class="eyebrow">CONTENT</span>
+            <h3>Linked Account Content</h3>
+            <p>Review new videos from your linked social accounts before publishing them to Eden Music.</p>
+        </div>
+    </div>
+
+    <div id="linked-content-controls" class="dashboard-card">
+        <p id="linked-content-status">Checking for new content...</p>
+        <button type="button" class="secondary-btn" onclick="checkLinkedAccountContent()">
+            🔄 Check for New Videos
+        </button>
+        <label for="linked-content-destination">Approved video destination</label>
+        <select id="linked-content-destination">
+            <option value="home">Home Videos</option>
+            <option value="fan_vault">Fan Vault</option>
+            <option value="both">Both</option>
+        </select>
+
+    </div>
+
+    <div id="linked-content-list" class="developer-release-list">
+        <p class="dashboard-empty">No new linked content yet.</p>
+    </div></div>
+
+
+    <div id="developer-dashboard-section-live" class="developer-dashboard-section"><div class="dashboard-header">
+        <div>
+            <span class="eyebrow">UPCOMING EVENTS</span>
+            <h3>Upcoming Events</h3>
+            <p>Create and manage concerts, tours, festivals, and other scheduled events.</p>
+        </div>
+    </div>
+
+    <div id="fan-vault-event-controls" class="dashboard-card">
+        <label for="upcoming-event-title">Event Title</label>
+        <input id="upcoming-event-title" type="text" placeholder="Eden Music Live Session">
+
+        <label for="upcoming-event-description">Description</label>
+        <textarea id="upcoming-event-description" rows="4" placeholder="Tell fans about this event..."></textarea>
+
+        <label for="upcoming-event-date">Date & Time</label>
+        <input id="upcoming-event-date" type="datetime-local">
+
+    <label>
+        <input id="upcoming-event-broadcast-live" type="checkbox">
+        Broadcast this event live in Eden Music
+    </label>
+
+        <label for="upcoming-event-image">Event Image</label>
+        <input id="upcoming-event-image" type="file" accept="image/*">
+
+        <button type="button" class="primary-btn" onclick="createFanVaultEvent()">
+            📅 Save Event Changes
+        </button>
+
+        <p id="fan-vault-event-save-message"></p>
+    </div>
+
+    <div id="fan-vault-dashboard-events" class="developer-release-list">
+        <p class="dashboard-empty">Loading upcoming events...</p>
+    </div>
+    <div class="dashboard-header">
+        <div>
+            <span class="eyebrow">LIVE CONTROLS</span>
+            <h3>Live Event Controls</h3>
+            <p>Manage the currently active Eden Music live stream.</p>
+        </div>
+    </div>
+
+    <div id="fan-vault-live-controls" class="dashboard-card">
+        <div class="app-live-camera">
+            <video id="app-live-preview" autoplay muted playsinline></video>
+            <div id="eden-artist-live-overlay">
+                <button type="button" id="eden-artist-live-exit" onclick="exitEdenArtistLive()">✕ Exit</button>
+                <div id="eden-artist-live-status">🔴 LIVE</div></div>
+                <button type="button" id="eden-artist-live-end" onclick="stopFanVaultLiveEvent()">⏹ End Live</button>
+            </div>
+            <div class="app-live-camera-actions">
+                <button type="button" class="primary-btn" onclick="startAppLivePreview()">🎥 Open Camera</button>
+                <button type="button" class="secondary-btn" onclick="stopAppLivePreview()">⏹ Stop Camera</button>
+            </div>
+            <p id="app-live-preview-message"></p>
+        </div>
+        <label for="fan-vault-live-title">Live Title</label>
+        <input id="fan-vault-live-title" type="text" placeholder="Eden Music Live">
+
+        <label for="fan-vault-live-description-input">Description</label>
+        <textarea id="fan-vault-live-description-input" rows="4" placeholder="Tell fans about the live stream..."></textarea>
+
+        <label for="fan-vault-live-stream-url">Stream URL</label>
+        <input id="fan-vault-live-stream-url" type="url" placeholder="https://...">
+
+        <label for="fan-vault-live-thumbnail-url">Thumbnail URL</label>
+        <input id="fan-vault-live-thumbnail-url" type="url" placeholder="https://...">
+
+        <div class="live-control-actions">
+            <button type="button" class="primary-btn" onclick="startFanVaultLiveEvent()">
+                🔴 Start Live
+            </button>
+
+            <button type="button" class="secondary-btn" onclick="stopFanVaultLiveEvent()">
+                ⏹ Stop Live
+            </button>
+        </div>
+
+        <p id="fan-vault-live-save-message"></p>
+    </div>
+
+
+    <div id="developer-dashboard-section-merch" class="developer-dashboard-section"><div class="dashboard-header">
+        <div>
+            <span class="eyebrow">MERCHANDISE</span>
+            <h3>Merchandise Management</h3>
+            <p>Add and manage Eden Music merchandise.</p>
+        </div>
+    </div>
+
+    <div id="developer-merch-controls" class="dashboard-card">
+        <label for="merch-name">Name</label>
+        <input id="merch-name" type="text" placeholder="Eden Music T-Shirt">
+
+        <label for="merch-description">Description</label>
+        <textarea id="merch-description" rows="3" placeholder="Merchandise description..."></textarea>
+
+        <label for="merch-price">Price</label>
+        <input id="merch-price" type="number" min="0" step="0.01" placeholder="2500">
+
+        <label for="merch-currency">Currency</label>
+        <input id="merch-currency" type="text" value="KES">
+
+        <label for="merch-image-file">Merchandise Image</label>
+        <input id="merch-image-file" type="file" accept="image/*">
+
+        <label for="merch-stock">Stock</label>
+        <input id="merch-stock" type="number" min="0" placeholder="10">
+
+        <label>
+            <input id="merch-is-preorder" type="checkbox"> Pre-order
+        </label>
+
+        <label>
+            <input id="merch-is-available" type="checkbox" checked> Available
+        </label>
+
+        <button type="button" class="primary-btn" onclick="createMerchandise()">
+            🛍️ Add Merchandise
+        </button>
+
+        <p id="merch-save-message"></p>
+    </div>
+
+    <div id="developer-merch-list" class="developer-release-list">
+        <p class="dashboard-empty">Loading merchandise...</p>
+    </div></div>
+
+    <div id="developer-dashboard-section-profile" class="developer-dashboard-section"><div class="dashboard-header">
+        <div>
+            <span class="eyebrow">PROFILE</span>
+            <h3>Artist Profile</h3>
+            <p>Update the public Eden Music artist profile.</p>
+        </div>
+    </div>
+
+    <div id="developer-profile-controls" class="dashboard-card">
+        <label for="profile-display-name">Display Name</label>
+        <input id="profile-display-name" type="text" placeholder="Eden">
+
+        <label for="profile-bio">Bio</label>
+        <textarea id="profile-bio" rows="6" placeholder="Tell listeners about Eden..."></textarea>
+
+        <label>Profile Picture</label>
+
+        <div class="profile-editor-avatar">
+            <img
+                id="developer-profile-avatar"
+                class="profile-avatar-image"
+                src=""
+                alt="Profile picture"
+            >
+
+            <div
+                id="developer-profile-avatar-placeholder"
+                class="profile-avatar"
+            >
+                ✨
+            </div></div>
+        </div>
+
+        <input
+            id="profile-avatar-file"
+            type="file"
+            accept="image/*"
+        >
+
+        <h4>Social Links</h4>
+
+        <div id="social-links-editor"></div>
+
+        <button
+            type="button"
+            class="secondary-btn"
+            id="add-social-link-button"
+            onclick="addSocialLinkField()"
+        >
+            + Add Social Link
+        </button>
+
+        <h4>Linked Social Accounts</h4>
+
+    <div id="linked-social-accounts-list"></div>
+
+    <div class="linked-social-account-form">
+        <select id="linked-social-platform">
+            <option value="tiktok">TikTok</option>
+            <option value="instagram">Instagram</option>
+        </select>
+        <input id="linked-social-account-url" type="url" placeholder="TikTok or Instagram profile URL">
+        <input id="linked-social-account-username" type="text" placeholder="Username (optional)">
+        <button type="button" class="secondary-btn" onclick="linkSocialAccount()">Link Account</button>
+    </div>
+
+    <button
+            id="save-profile-button"
+            class="primary-btn"
+            onclick="saveDeveloperProfile()"
+        >
+            Save Profile
+        </button>
+
+        <p id="profile-save-message"></p>
+    </div>
+
+    <button id="developer-logout-button" class="secondary-btn" onclick="developerLogout()">Log Out</button>
+
+    <div id="song-editor" class="dashboard-card" style="display:none;">
+        <span class="eyebrow">SONG EDITOR</span>
+        <h3 id="song-editor-title">Edit Song</h3>
+
+        <label for="edit-song-title">Song Title</label>
+        <input id="edit-song-title" type="text" placeholder="Song title">
+
+        <label for="edit-song-artist">Artist</label>
+        <input id="edit-song-artist" type="text" placeholder="Eden">
+
+        <label for="edit-song-audio">Replace Audio File</label>
+        <input id="edit-song-audio" type="file" accept="audio/*">
+
+        <label for="edit-song-cover">Replace Cover Artwork</label>
+        <input id="edit-song-cover" type="file" accept="image/*">
+
+        <label for="edit-song-video">Replace Music Video</label>
+        <input id="edit-song-video" type="file" accept="video/*">
+
+        <label for="edit-song-lyrics">Lyrics</label>
+        <textarea id="edit-song-lyrics" rows="12" placeholder="Enter lyrics here..."></textarea>
+
+        <button id="save-song-edit-button" class="primary-btn" onclick="saveEditedSong()">
+            Save Song Changes
+        </button>
+
+        <button class="secondary-btn" onclick="cancelSongEdit()">
+            Cancel
+        </button>
+
+        <p id="song-editor-message"></p>
+    </div>
+    <div id="lyrics-editor" class="dashboard-card" style="display:none;">
+        <span class="eyebrow">LYRICS EDITOR</span>
+        <h3 id="lyrics-editor-title">Edit Lyrics</h3>
+        <textarea id="lyrics-editor-input" rows="12" placeholder="Enter lyrics here..."></textarea>
+        <button id="save-lyrics-button" class="primary-btn" onclick="saveEditedLyrics()">Save Lyrics</button>
+        <button class="secondary-btn" onclick="cancelLyricsEdit()">Cancel</button>
+        <p id="lyrics-editor-message"></p>
+    </div>
+
+</section>
+
+<!-- ================= MUSIC SCREEN ================= -->
+<section id="music-screen" class="music-screen">
+
+    <div class="music-screen-header">
+        <div>
+            <span class="eyebrow">EDEN MUSIC</span>
+            <h2>Music</h2>
+            <p>Listen to the latest releases.</p>
+        </div>
+
+        <button class="close-music" onclick="closeMusicScreen()">✕</button>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="music-search">
+        <span>🔎</span>
+        <input
+            type="search"
+            id="song-search"
+            placeholder="Search songs..."
+            oninput="searchSongs()">
+    </div>
+
+    <!-- SONG LIST -->
+    <div class="music-section-title">
+        <h3>All Songs</h3>
+        <span id="song-count">3 songs</span>
+    </div>
+
+    <div id="song-list">
+
+        <article class="song-row" data-title="Midnight">
+            <div class="song-number">01</div>
+
+            <div class="song-cover">🎵</div>
+
+            <div class="song-details">
+                <h3>Midnight</h3>
+                <p>Eden • R&B</p>
+            </div>
+
+            <span class="song-duration">3:42</span>
+
+            <button
+                class="song-play"
+                onclick="playSong('Midnight')">
+                ▶
+            </button>
+        </article>
+
+
+        <article class="song-row" data-title="After Hours">
+            <div class="song-number">02</div>
+
+            <div class="song-cover">🎶</div>
+
+            <div class="song-details">
+                <h3>After Hours</h3>
+                <p>Eden • Soul</p>
+            </div>
+
+            <span class="song-duration">3:18</span>
+
+            <button
+                class="song-play"
+                onclick="playSong('After Hours')">
+                ▶
+            </button>
+        </article>
+
+
+
+    </div>
+
+    <!-- ================= FULL MUSIC PLAYER ================= -->
+    <section id="song-player" class="song-player">
+        <audio id="audio-player" preload="metadata"></audio>
+
+        <div class="player-header">
+            <button class="player-back" onclick="closeSongPlayer()">✕</button>
+            <span>NOW PLAYING</span>
+            <button class="player-more">•••</button>
+        </div>
+
+        <div class="player-artwork" id="player-media">
+        <div id="player-cover">🎵</div>
+    </div>
+
+        <div class="player-info">
+            <h2 id="player-title">Midnight</h2>
+            <p id="player-artist">Eden</p>
+        </div>
+
+        <div class="player-progress">
+            <input type="range" id="player-progress" min="0" max="100" value="0">
+            <div class="player-times">
+                <span id="player-current-time">0:00</span>
+                <span id="player-duration">3:42</span>
+            </div>
+        </div>
+
+        <div class="player-controls">
+            <button onclick="previousSong()">⏮</button>
+            <button id="main-play-button" class="main-play-button" onclick="togglePlayer()">▶</button>
+            <button onclick="nextSong()">⏭</button>
+        </div>
+
+        <div class="player-lyrics">
+            <h3>Lyrics</h3>
+            <p id="player-lyrics-text">Lyrics will appear here.</p>
+        </div>
+    </section>
+
+    </div>
+
+</section>
+<!-- ================= FAN ACCOUNT SCREEN ================= -->
+<section id="fan-account-screen" class="profile-screen">
+
+    <div class="profile-header-card">
+        <span class="eyebrow">EDEN MUSIC</span>
+        <h2>Fan Account</h2>
+        <p>Create an account or sign in to access the Fan Vault.</p>
+    </div>
+
+    <div id="fan-register-panel" class="profile-section">
+        <span class="eyebrow">NEW HERE?</span>
+        <h3>Create Account</h3>
+
+        <label for="fan-register-name">Display Name</label>
+        <input id="fan-register-name" type="text" placeholder="Your name" autocomplete="name">
+
+        <label for="fan-register-email">Email</label>
+        <input id="fan-register-email" type="email" placeholder="you@example.com" autocomplete="email">
+
+        <label for="fan-register-password">Password</label>
+        <input id="fan-register-password" type="password" placeholder="Create a password" autocomplete="new-password">
+
+        <button id="fan-register-button" class="primary-btn" onclick="registerFanAccount()">
+            Create Account
+        </button>
+
+        <p id="fan-register-message"></p>
+
+        <button type="button" class="text-btn" onclick="showFanLogin()">
+            Already have an account? Sign in
+        </button>
+    </div>
+
+    <div id="fan-login-panel" class="profile-section" style="display:none;">
+        <span class="eyebrow">WELCOME BACK</span>
+        <h3>Fan Login</h3>
+
+        <label for="fan-login-email">Email</label>
+        <input id="fan-login-email" type="email" placeholder="you@example.com" autocomplete="email">
+
+        <label for="fan-login-password">Password</label>
+        <input id="fan-login-password" type="password" placeholder="Your password" autocomplete="current-password">
+
+        <button id="fan-login-button" class="primary-btn" onclick="loginFanAccount()">
+            Sign In
+        </button>
+
+        <p id="fan-login-message"></p>
+
+        <button type="button" class="text-btn" onclick="showFanRegister()">
+            Need an account? Create one
+        </button>
+    </div>
+
+    <div id="fan-account-panel" class="profile-section" style="display:none;">
+        <span class="eyebrow">FAN ACCOUNT</span>
+
+        <div class="fan-avatar-editor">
+            <img id="fan-account-avatar" class="profile-avatar-image" src="" alt="Fan profile picture" style="display:none;">
+            <div id="fan-account-avatar-placeholder" class="profile-avatar">👤</div>
+            <label class="secondary-btn" for="fan-avatar-file">Change Profile Picture</label>
+            <input id="fan-avatar-file" type="file" accept="image/*" style="display:none;">
+        </div>
+
+        <h3 id="fan-account-name">Welcome</h3>
+        <p id="fan-account-email"></p>
+
+        <label class="profile-edit-field">
+            Display name
+            <input id="fan-display-name-input" type="text" maxlength="60" autocomplete="name">
+        </label>
+
+        <button type="button" class="primary-btn" onclick="saveFanAccountDetails()">
+            Save Changes
+        </button>
+
+        <button class="primary-btn" onclick="openFanVault()">
+            🔐 Enter Fan Vault
+        </button>
+
+        <button type="button" class="secondary-btn" onclick="fanLogout()">
+            Log Out
+        </button>
+
+        <p id="fan-account-message"></p>
+    </div>
+
+</section>
+
+    <!-- ================= NOTIFICATIONS SCREEN ================= -->
+<section id="notifications-screen" class="profile-screen">
+    <button type="button" class="secondary-btn" onclick="closeNotifications()">
+        ← Back
+    </button>
+
+    <div class="profile-header-card">
+        <span class="eyebrow">EDEN MUSIC</span>
+        <h2>Notifications</h2>
+        <p id="notifications-account-label">Checking your account...</p>
+        <p>Stay updated with the latest from Eden.</p>
+    </div>
+
+    <div id="notifications-list" class="notifications-list">
+        <p class="dashboard-empty">Loading notifications...</p>
+    </div>
+</section>
+
+<!-- ================= PUBLIC PROFILE SCREEN ================= -->
+<section id="profile-screen" class="profile-screen">
+    <div class="profile-header-card">
+
+        <div class="profile-avatar-wrapper">
+            <img
+                id="public-profile-avatar"
+                class="profile-avatar-image"
+                src=""
+                alt="Eden profile picture"
+            >
+            <div
+                id="public-profile-avatar-placeholder"
+                class="profile-avatar"
+            >
+                ✨
+            </div>
+        </div>
+
+        <h2 id="public-profile-name">Eden</h2>
+        <p id="public-profile-bio">R&amp;B Artist &amp; Producer</p>
+    </div>
+
+    <div class="profile-section">
+        <span class="eyebrow">FOLLOW EDEN</span>
+        <h3>Stay connected</h3>
+
+        <div id="public-social-links" class="social-stack"></div>
+    </div>
+
+    <div id="fan-account-profile-section" class="profile-section fan-account-profile-section" style="display:none;">
+        <span class="eyebrow">MY ACCOUNT</span>
+
+        <div class="fan-avatar-editor">
+            <img id="public-fan-profile-avatar" class="profile-avatar-image" src="" alt="Fan profile picture" style="display:none;">
+            <div id="public-fan-profile-avatar-placeholder" class="profile-avatar">👤</div>
+            <label class="secondary-btn" for="public-fan-avatar-file">Change Profile Picture</label>
+            <input id="public-fan-avatar-file" type="file" accept="image/*" style="display:none;">
+        </div>
+
+        <h3 id="fan-profile-name">Fan Account</h3>
+        <p id="fan-profile-email"></p>
+        <p id="fan-profile-role">Fan account</p>
+        <p id="public-fan-profile-message"></p>
+
+        <button class="primary-btn" onclick="openFanVault()">🔐 Enter Fan Vault</button>
+    </div>
+
+    <div class="profile-section fan-access-section">
+        <span class="eyebrow">FAN ACCOUNT</span>
+        <h3>Fan Access</h3>
+        <p>Sign in to your fan account or enter the Fan Vault.</p>
+        <button class="primary-btn" onclick="navigateVault()">
+            👤 Fan Account
+        </button>
+    </div>
+
+    <div class="profile-section developer-access-section" id="developer-access-section" style="display:none;">
+        <span class="eyebrow">DEVELOPER</span>
+        <h3>Artist Dashboard</h3>
+
+        <button class="secondary-btn" onclick="openDeveloperDashboard()">
+            Developer Access
+        </button>
+        <button type="button" class="secondary-btn" id="profile-logout-button" onclick="fanLogout()" style="display:none;">Log Out</button>
+    </div>
+</section>
+
+<!-- ================= FAN VAULT SCREEN ================= -->
+<section id="fan-vault-screen" class="profile-screen">
+    <button type="button" class="secondary-btn fan-vault-top-back" onclick="closeFanVault()">
+        ← Back
+    </button>
+
+
+    <div class="profile-header-card">
+        <span class="eyebrow">EDEN MUSIC</span>
+        <h2>Fan Vault</h2>
+        <p>Exclusive content for Eden Music fans.</p>
+    </div><!-- ================= FAN VAULT LIVE ================= -->
+    <section class="profile-section fan-vault-live-section">
+        <div class="fan-vault-live-header">
+            <div>
+                <span class="eyebrow">LIVE</span>
+                <h3>Live with Eden</h3>
+                <p id="fan-vault-live-description">No live event right now.</p>
+            </div>
+            <span id="fan-vault-live-badge" class="fan-vault-live-badge">OFFLINE</span>
+            <button id="fan-vault-join-button" type="button" class="primary-btn" style="display:none;">🔴 Join Live</button>
+        </div>
+
+        <div id="fan-vault-live-player" class="fan-vault-live-player">
+            <button id="eden-live-end-button" class="eden-live-control-button eden-live-end-button" type="button" onclick="endEdenLive()">End Live</button>
+            <button id="eden-live-exit-button" class="eden-live-control-button eden-live-exit-button" type="button" onclick="exitEdenLive()">Exit Live</button>
+            <div id="eden-live-comments" class="eden-live-comments"></div>
+            <form id="eden-live-comment-form" class="eden-live-comment-form" onsubmit="sendEdenLiveComment(event)">
+                <input id="eden-live-comment-input" type="text" maxlength="300" placeholder="Say something..." autocomplete="off">
+                <button type="submit">➤</button>
+            </form>
+            <video id="fan-vault-live-video" autoplay playsinline controls style="display:none; width:100%; border-radius:18px;"></video>
+            <div class="fan-vault-live-placeholder">
+                <span>🔴</span>
+                <strong>No live stream</strong>
+                <small>Live events will appear here.</small>
+            </div>
+        </div>
+    </section>
+
+    <div class="profile-section">
+        <span class="eyebrow">EXCLUSIVE</span>
+        <h3>Behind the Scenes</h3>
+        <p>Enjoy exclusive videos and moments from Eden.</p>
+    </div>
+
+    <div id="fan-vault-videos" class="reels-container">
+        <p class="dashboard-empty">Loading exclusive videos...</p>
+    </div>
+
+    
+<section id="fan-vault-upcoming-events" class="fan-vault-upcoming-events">
+    <div class="profile-section">
+        <span class="eyebrow">EVENTS</span>
+        <h3>📅 Upcoming Events</h3>
+        <p>Upcoming Eden Music events and experiences.</p>
+    </div>
+
+    <div id="fan-vault-upcoming-events-grid" class="fan-vault-upcoming-events-grid">
+        <p class="dashboard-empty">Loading upcoming events...</p>
+    </div>
+</section>
+
+<section id="fan-vault-merchandise" class="fan-vault-merchandise">
+        <div class="profile-section">
+            <span class="eyebrow">EDEN MUSIC</span>
+            <h3>🛍️ Merchandise</h3>
+            <p>Official Eden Music merchandise and pre-orders.</p>
+        </div>
+
+        <div id="fan-vault-merch-grid" class="fan-vault-merch-grid">
+            <p class="dashboard-empty">Loading merchandise...</p>
+        </div>
+    </section>
+
+</section>
+
+
+
+
+<!-- ================= BOTTOM NAVIGATION ================= -->
+    <nav class="bottom-nav">
+
+        <button class="nav-item active" onclick="navigateHome()">
+            <span class="nav-icon">⌂</span>
+            <small>Home</small>
+        </button>
+
+        <button class="nav-item" onclick="navigateMusic()">
+            <span class="nav-icon">♫</span>
+            <small>Music</small>
+        </button>
+
+        <button class="nav-item" onclick="navigateVault()">
+            <span class="nav-icon">◉</span>
+            <small>Vault</small>
+        </button>
+
+        <button class="nav-item" onclick="navigateProfile()">
+            <span class="nav-icon">●</span>
+            <small>Profile</small>
+        </button>
+
+    </nav>
+
+</div>
+
+
+<!-- ================= MESSAGE ================= -->
+<div id="message-box" class="message-box"></div>
+
+
+<script>
+
+function showMessage(message) {
+
+    const box = document.getElementById("message-box");
+
+    box.textContent = message;
+    box.classList.add("show");
+
+    setTimeout(() => {
+        box.classList.remove("show");
+    }, 3000);
+}
+
+</script>
+
+<script type="module" src="script.js"></script>
+
+<!-- TIKTOK REEL VIEWER -->
+<div id="tiktok-reel-viewer" class="tiktok-reel-viewer">
+    <button type="button" class="tiktok-reel-close" onclick="closeTikTokReel()">✕</button>
+    <video id="tiktok-reel-video" class="tiktok-reel-video" playsinline></video>
+    <div class="tiktok-reel-gradient"></div>
+    <div class="tiktok-reel-info">
+        <strong id="tiktok-reel-title"></strong>
+        <p id="tiktok-reel-description"></p>
+    </div>
+    <div class="tiktok-reel-actions">
+        <button type="button" id="tiktok-reel-like">❤️</button>
+        <button type="button" id="tiktok-reel-comment">💬</button>
+        <button type="button" id="tiktok-reel-share">↗️</button>
+        <button type="button" id="tiktok-reel-mute">🔊</button>
+    </div>
+</div>
+
+</body>
+</html>

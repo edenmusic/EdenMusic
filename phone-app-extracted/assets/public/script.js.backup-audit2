@@ -1,0 +1,6759 @@
+import { EDEN_APP_ASSETS } from "./app-assets-config.js";
+import { supabase } from './supabase.js';
+window.EDEN_APP_ASSETS = EDEN_APP_ASSETS;
+
+// Initialization
+alert("Welcome to Eden Music!");
+
+// App state
+let dynamicTrackDatabase = {};
+let activelyPlayingTrackId = null;
+let loadedTracks = [];
+
+// Load songs from Supabase
+async function loadSongsFromSupabase() {
+    const { data, error } = await supabase
+        .from("song")
+        .select("*")
+        .order("title");
+
+    if (error) {
+        console.error(
+            "Supabase songs error:",
+            JSON.stringify(error, null, 2)
+        );
+        return;
+    }
+
+    loadedTracks = data.map(song => ({ id: song.id, title: song.title, artist: song.artist || "Eden", duration: song.duration, audioUrl: song.audio_url, coverUrl: song.cover_url, videoUrl: song.video_url || "", lyrics: song.lyrics || "" }));
+    data.forEach(song => {
+        const track = {
+            id: song.id,
+            title: song.title,
+            artist: song.artist || "Eden",
+            duration: song.duration,
+            audioUrl: song.audio_url,
+            coverUrl: song.cover_url,
+            videoUrl: song.video_url || "",
+            lyrics: song.lyrics || "",
+        };
+
+        // Allow lookup by both UUID and title
+        dynamicTrackDatabase[song.id] = track;
+        dynamicTrackDatabase[song.title] = track; dynamicTrackDatabase[song.title.toLowerCase()] = track;
+    });
+
+    console.log("Songs loaded from Supabase:", data);
+    console.log("EDEN SONG DATA:", JSON.stringify(data, null, 2));
+    console.log("EDEN VIDEO FROM DATABASE:", JSON.stringify(data.map(song => ({ title: song.title, video_url: song.video_url })), null, 2));
+    renderSongList();
+    renderFeaturedSong();
+}
+// Home Featured Song
+function renderFeaturedSong() {
+    const featuredSong = loadedTracks[0];
+    const featuredCard = document.querySelector(".featured-song");
+
+    if (!featuredCard || !featuredSong) return;
+
+    const artwork = featuredCard.querySelector(".song-art");
+    const title = featuredCard.querySelector(".song-info h3");
+    const description = featuredCard.querySelector(".song-info p");
+    const playButton = featuredCard.querySelector(".play-btn");
+
+    if (artwork) {
+        artwork.innerHTML = featuredSong.coverUrl
+            ? `<img src="${featuredSong.coverUrl}" alt="${featuredSong.title} cover">`
+            : "🎵";
+    }
+
+    if (title) title.textContent = featuredSong.title;
+    if (description) description.textContent = featuredSong.artist || "Eden";
+
+    if (playButton) {
+        playButton.onclick = () => { openMusicScreen(); requestAnimationFrame(() => playSong(featuredSong.id)); };
+    }
+}
+
+// Media Streaming Node Interceptor State Events
+function renderSongList() {
+    const songList = document.getElementById("song-list");
+    const songCount = document.getElementById("song-count");
+
+    if (!songList) return;
+
+    songList.innerHTML = loadedTracks.map((track, index) => {
+        const minutes = Math.floor((track.duration || 0) / 60);
+        const seconds = Math.floor((track.duration || 0) % 60).toString().padStart(2, "0");
+        const duration = track.duration ? `${minutes}:${seconds}` : "--:--";
+        const cover = track.coverUrl
+            ? `<img src="${track.coverUrl}" alt="${track.title} cover">`
+            : "🎵";
+
+        return `<article class="song-row" data-title="${track.title}">
+            <div class="song-number">${String(index + 1).padStart(2, "0")}</div>
+            <div class="song-cover">${cover}</div>
+            <div class="song-details">
+                <h3>${track.title}</h3>
+                <p>${track.artist} • R&B</p>
+            </div>
+            <span class="song-duration">${duration}</span>
+            <button class="song-play" onclick="playSong('${track.id}')">▶</button>
+        </article>`;
+    }).join("");
+
+    if (songCount) {
+        songCount.textContent = `${loadedTracks.length} ${loadedTracks.length === 1 ? "song" : "songs"}`;
+    }
+}
+
+async function checkDeveloperSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) return;
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("role, display_name")
+        .eq("user_id", session.user.id)
+        .single();
+
+    developerUserId = session.user.id;
+
+    if (error) {
+        console.error("Developer profile check error:", error);
+        return;
+    }
+
+    if (profile?.role !== "developer") {
+        return;
+    }
+
+    const loginPanel = document.getElementById("developer-login");
+    const dashboardHeader = document.getElementById("developer-dashboard-header");
+    const controls = document.getElementById("developer-controls");
+
+    if (loginPanel) loginPanel.style.display = "none";
+    if (dashboardHeader) dashboardHeader.style.display = "block";
+    if (controls) controls.style.display = "flex";
+    loadDeveloperReleases();
+    loadDeveloperProfile();
+    loadFunVaultVideos();
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+    const paymentReference = new URLSearchParams(window.location.search).get("reference");
+    if (paymentReference) {
+        verifyMerchPayment(paymentReference).then(success => {
+            if (success) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showMessage("Payment successful. Your order is now paid.");
+            }
+        });
+    }
+
+    loadPublicReels();
+    loadFanAccount();
+    checkDeveloperSession();
+
+    const progressBar = document.getElementById("player-progress");
+    const currentTimeDisplay = document.getElementById("player-current-time");
+    const durationDisplay = document.getElementById("player-duration");
+
+    function formatTime(seconds) {
+        if (!Number.isFinite(seconds)) return "0:00";
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60).toString().padStart(2, "0");
+        return minutes + ":" + secs;
+    }
+
+    const audio = document.getElementById("audio-player");
+    const video = document.getElementById("player-video");
+    const playButton = document.getElementById("main-play-button");
+    const visualizer = document.getElementById("visualizer");
+
+    function getActiveMedia() {
+        if (video && video.src && !video.paused) return video;
+        if (video && video.src && !audio?.src) return video;
+        return audio;
+    }
+
+    function updatePlayerDisplay(media) {
+        if (!media) return;
+
+        if (progressBar) {
+            progressBar.max = Number.isFinite(media.duration) ? media.duration : 0;
+            progressBar.value = media.currentTime || 0;
+        }
+
+        if (currentTimeDisplay) {
+            currentTimeDisplay.textContent = formatTime(media.currentTime);
+        }
+
+        if (durationDisplay) {
+            durationDisplay.textContent = formatTime(media.duration);
+        }
+    }
+
+    function handlePlay() {
+        if (playButton) playButton.textContent = "⏸";
+        if (visualizer) visualizer.classList.add("playing");
+    }
+
+    function handlePause() {
+        if (playButton) playButton.textContent = "▶";
+        if (visualizer) visualizer.classList.remove("playing");
+    }
+
+    function handleEnded() {
+        if (loadedTracks.length > 1) {
+            nextSong();
+        } else {
+            handlePause();
+        }
+    }
+
+    [audio, video].forEach(media => {
+        if (!media) return;
+
+        media.addEventListener("loadedmetadata", () => {
+            updatePlayerDisplay(media);
+        });
+
+        media.addEventListener("timeupdate", () => {
+            if (getActiveMedia() === media) {
+                updatePlayerDisplay(media);
+            }
+        });
+
+        media.addEventListener("play", handlePlay);
+        media.addEventListener("pause", handlePause);
+        media.addEventListener("ended", handleEnded);
+    });
+
+    if (progressBar) {
+        progressBar.addEventListener("input", () => {
+            const activeMedia = getActiveMedia();
+            if (activeMedia) {
+                activeMedia.currentTime = Number(progressBar.value);
+            }
+        });
+    }
+
+    loadSongsFromSupabase();
+});
+
+// 1. App Router Controller Mechanics
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-view').forEach(view => view.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`${tabName}-view`).classList.add('active');
+    
+    const navButtons = document.querySelectorAll('.nav-item');
+    if (tabName === 'home') navButtons[0].classList.add('active');
+    if (tabName === 'songs') navButtons[1].classList.add('active');
+    if (tabName === 'vault') navButtons[2].classList.add('active');
+    if (tabName === 'profile') navButtons[3].classList.add('active');
+}
+
+// 2. Playback Ingest Automation System
+function playSong(trackId) {
+    let track = dynamicTrackDatabase[trackId] || dynamicTrackDatabase[String(trackId).toLowerCase()];
+
+    if (!track) {
+        track = {
+            id: trackId,
+            title: trackId,
+            artist: "Eden"
+        };
+    }
+
+    activelyPlayingTrackId = track.id;
+    console.log("EDEN PLAY TRACK:", track);
+    console.log("EDEN FULL TRACK:", JSON.stringify(track, null, 2));
+
+    const player = document.getElementById("song-player");
+    const audio = document.getElementById("audio-player");
+    const title = document.getElementById("player-title");
+    const artist = document.getElementById("player-artist");
+    const cover = document.getElementById("player-cover");
+    const lyricsElement = document.getElementById("player-lyrics-text");
+    const media = document.getElementById("player-media");
+
+    if (player) {
+        openMusicScreen();
+        player.classList.add("active");
+    }
+
+    if (title) {
+        title.textContent = track.title;
+    }
+
+    if (artist) {
+        artist.textContent = track.artist || "Eden";
+    }
+
+    if (lyricsElement) {
+        lyricsElement.textContent = track.lyrics || "Lyrics will appear here.";
+    }
+
+    if (cover) {
+        if (track.coverUrl) {
+            cover.innerHTML = `<img src="${track.coverUrl}" alt="${track.title} cover">`;
+        } else {
+            cover.textContent = "🎵";
+        }
+    }
+
+if (audio) {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+}
+
+if (audio && track.audioUrl) {
+    audio.src = track.audioUrl;
+    audio.load();
+
+    audio.play().catch(error => {
+        console.error("Audio playback error:", error);
+    });
+}
+
+document.body.classList.add("player-open");
+
+    renderLyricsDisplay(track.id);
+}
+
+// 3. Media Ingestion Node Engine (Artist Dashboard Preference)
+let developerUserId = null;
+async function developerLogin() {
+    const emailInput = document.getElementById("developer-email");
+    const passwordInput = document.getElementById("developer-password");
+    const message = document.getElementById("developer-login-message");
+    const button = document.getElementById("developer-login-button");
+
+    const email = emailInput?.value.trim();
+    const password = passwordInput?.value;
+
+    if (!email || !password) {
+        if (message) message.textContent = "Enter your email and password.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Signing in...";
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (error) {
+        console.error("Developer login error:", error);
+        if (message) message.textContent = "Login failed. Check your credentials.";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Developer Login";
+        }
+        return;
+    }
+
+    const userId = data.user?.id;
+    developerUserId = userId;
+
+    const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, display_name")
+        .eq("user_id", userId)
+        .single();
+
+    if (profileError || profile?.role !== "developer") {
+        await supabase.auth.signOut();
+        if (message) message.textContent = "This account is not authorized as a developer.";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Developer Login";
+        }
+        return;
+    }
+
+    if (message) message.textContent = `Welcome, ${profile.display_name || "Developer"}.`;
+
+    document.getElementById("developer-login").style.display = "none";
+    document.getElementById("developer-dashboard-header").style.display = "block";
+    document.getElementById("developer-controls").style.display = "flex";
+    await loadDeveloperProfile();
+    await loadFunVaultVideos();
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Developer Login";
+    }
+}
+
+window.developerLogin = developerLogin;
+
+async function loadDeveloperReleases() {
+    const list = document.getElementById("developer-release-list");
+
+    if (!list) return;
+
+    list.innerHTML = '<p class="dashboard-empty">Loading releases...</p>';
+
+    const { data, error } = await supabase
+        .from("song")
+        .select("*")
+        .order("title");
+
+    if (error) {
+        console.error("Developer releases error:", error);
+        list.innerHTML = '<p class="dashboard-empty">Could not load releases.</p>';
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        list.innerHTML = '<p class="dashboard-empty">No songs published yet.</p>';
+        return;
+    }
+
+    list.innerHTML = data.map(song => `
+        <div class="developer-release-card">
+            <img src="${song.cover_url || ""}" alt="${song.title} cover">
+            <div class="developer-release-info">
+                <h4>${song.title}</h4>
+                <p>${song.artist || "Eden"}</p>
+                <div class="developer-release-actions">
+                    <button class="secondary-btn" onclick="editSong('${song.id}')">Edit Song</button>
+                    <button class="secondary-btn" onclick="editSongLyrics('${song.id}')">Edit Lyrics</button>
+                    <button class="danger-btn" onclick="deleteSong('${song.id}')">Delete</button>
+                </div>
+            </div>
+        </div>
+    `).join("");
+}
+async function saveSongToSupabase() {
+    const titleInput = document.getElementById("song-title-input");
+    const artistInput = document.getElementById("song-artist-input");
+    const audioInput = document.getElementById("song-audio-input");
+    const coverInput = document.getElementById("song-cover-input");
+    const videoInput = document.getElementById("song-video-input");
+    const lyricsInput = document.getElementById("song-lyrics-input");
+    const saveButton = document.getElementById("save-song-button");
+
+    const title = titleInput?.value.trim();
+    const artist = artistInput?.value.trim() || "Eden";
+    const audioFile = audioInput?.files[0];
+    const coverFile = coverInput?.files[0];
+    const videoFile = videoInput?.files[0];
+    const lyrics = lyricsInput?.value.trim() || "";
+
+    if (!title) {
+        alert("Please enter a song title.");
+        return;
+    }
+
+    if (!audioFile) {
+        alert("Please select an audio file.");
+        return;
+    }
+
+    if (!coverFile) {
+        alert("Please select cover artwork.");
+        return;
+    }
+
+    try {
+        if (saveButton) {
+            saveButton.disabled = true;
+            saveButton.textContent = "Uploading...";
+        }
+
+        const safeTitle = title
+            .replace(/[^a-zA-Z0-9-_]/g, "_")
+            .replace(/_+/g, "_");
+
+        const timestamp = Date.now();
+
+        const audioPath = `${timestamp}_${safeTitle}${audioFile.name.substring(audioFile.name.lastIndexOf("."))}`;
+        const coverPath = `${timestamp}_${safeTitle}_cover${coverFile.name.substring(coverFile.name.lastIndexOf("."))}`;
+
+        const { error: audioUploadError } = await supabase
+            .storage
+            .from("song")
+            .upload(audioPath, audioFile, {
+                cacheControl: "3600",
+                upsert: false
+            });
+
+        if (audioUploadError) {
+            throw audioUploadError;
+        }
+
+        const { error: coverUploadError } = await supabase
+            .storage
+            .from("song")
+            .upload(coverPath, coverFile, {
+                cacheControl: "3600",
+                upsert: false
+            });
+
+        if (coverUploadError) {
+            throw coverUploadError;
+        }
+
+        let videoUrl = "";
+
+        if (videoFile) {
+            const videoExtension = videoFile.name.substring(videoFile.name.lastIndexOf("."));
+            const videoPath = `${timestamp}_${safeTitle}_video${videoExtension}`;
+
+            const { error: videoUploadError } = await supabase
+                .storage
+                .from("song")
+                .upload(videoPath, videoFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (videoUploadError) {
+                throw videoUploadError;
+            }
+
+            const { data: videoPublicData } = supabase
+                .storage
+                .from("song")
+                .getPublicUrl(videoPath);
+
+            videoUrl = videoPublicData.publicUrl;
+        }
+
+        const { data: audioPublicData } = supabase
+            .storage
+            .from("song")
+            .getPublicUrl(audioPath);
+
+        const { data: coverPublicData } = supabase
+            .storage
+            .from("song")
+            .getPublicUrl(coverPath);
+
+        const audioUrl = audioPublicData.publicUrl;
+        const coverUrl = coverPublicData.publicUrl;
+
+        const audio = new Audio();
+        audio.src = audioUrl;
+
+        const duration = await new Promise((resolve, reject) => {
+            audio.addEventListener("loadedmetadata", () => {
+                resolve(Math.round(audio.duration));
+            });
+
+            audio.addEventListener("error", () => {
+                resolve(0);
+            });
+        });
+
+        const { error: insertError } = await supabase
+            .from("song")
+            .insert({
+                title: title,
+                artist: artist,
+                duration: duration,
+                audio_url: audioUrl,
+                cover_url: coverUrl,
+                video_url: videoUrl,
+                lyrics: lyrics
+            });
+
+        if (insertError) {
+            throw insertError;
+        }
+
+        alert("Song saved successfully!");
+
+        titleInput.value = "";
+        artistInput.value = "Eden";
+        audioInput.value = "";
+        coverInput.value = "";
+        lyricsInput.value = "";
+
+        await loadSongsFromSupabase();
+
+    } catch (error) {
+        console.error("Save song error:", error);
+        alert("Could not save the song. Check the browser console for details.");
+    } finally {
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = "Save Song";
+        }
+    }
+}
+
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const audioUrl = URL.createObjectURL(file);
+    const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
+    const trackId = "track_" + Date.now();
+    
+    // Scrape running data cache context fields from manual layout text fields
+    const typedLyrics = document.getElementById('manual-lyrics-input').value.trim();
+
+    // Map properties structural dataset mapping configurations directly
+    dynamicTrackDatabase[trackId] = {
+        id: trackId,
+        title: cleanTitle,
+        audioUrl: audioUrl,
+        lyrics: typedLyrics || ""
+    };
+
+    const noSongsMsg = document.getElementById('no-songs-msg');
+    if (noSongsMsg) { noSongsMsg.remove(); }
+
+    const songListContainer = document.getElementById('dynamic-song-list');
+    const newButton = document.createElement('button');
+    newButton.className = 'song-btn';
+    newButton.id = `btn_${trackId}`;
+    newButton.innerHTML = `🎵 ${cleanTitle}`;
+    
+    newButton.onclick = function() {
+        playSong(trackId);
+    };
+
+    songListContainer.appendChild(newButton);
+    playSong(trackId);
+}
+// 4. Custom Manual Lyrics Update Implementation Engine
+function saveManualLyrics() {
+    const lyricsText = document.getElementById('manual-lyrics-input').value.trim();
+    
+    if (!activelyPlayingTrackId) {
+        alert("Please load or play a track first using Step 1 before assigning manual lyrics to it!");
+        return;
+    }
+
+    // Write directly into internal variable memory configuration cache layer
+    dynamicTrackDatabase[activelyPlayingTrackId].lyrics = lyricsText;
+    
+    // Command instant refresh layout cycles
+    renderLyricsDisplay(activelyPlayingTrackId);
+    alert("Lyrics updated successfully for the current track!");
+}
+
+// Layout Presentation Transform Engine Layer
+function renderLyricsDisplay(trackId) {
+    const track = dynamicTrackDatabase[trackId];
+
+    const lyricsBox = document.getElementById('active-lyrics-display');
+    const lyricsTextElement = document.getElementById('active-lyrics-text');
+    const manualLyricsInput = document.getElementById('manual-lyrics-input');
+
+    // The current Music screen does not have the old lyrics elements.
+    // Don't let that stop the player from opening.
+    if (!lyricsBox || !lyricsTextElement) {
+        return;
+    }
+
+    if (track && track.lyrics) {
+        lyricsBox.classList.remove('hidden');
+        lyricsTextElement.innerHTML = track.lyrics.replace(/\n/g, '<br>');
+
+        if (manualLyricsInput) {
+            manualLyricsInput.value = track.lyrics;
+        }
+    } else {
+        lyricsBox.classList.add('hidden');
+        lyricsTextElement.innerHTML = '';
+    }
+}
+
+// 5. Active Newsletter Ingest Hook
+function subscribeFan() {
+    const emailInput = document.getElementById('fan-email');
+    const emailValue = emailInput.value.trim();
+
+    if (emailValue === "") {
+        alert("Please enter a valid email address!");
+    } else {
+        alert(`Awesome! ${emailValue} has been added to the Inner Circle. Stay tuned for updates!`);
+        emailInput.value = ""; 
+    }
+}
+
+// 6. Interactive Multi-Functional Fan Vault Engine Manager
+function triggerVaultAction(type, itemName = '') {
+    if (type === 'video') {
+        alert("🎬 Loading Behind-the-Scenes Trailer... (Exclusive video feature drops fully in Phase 2!)");
+    } else if (type === 'merch') {
+        alert(`🛍️ "${itemName}" Pre-order option selected! Merch vault purchase functionality arriving next update.`);
+    } else if (type === 'concert') {
+        alert("🎫 Scanning tour database... No local shows scheduled yet. You'll get an alert here instantly when tour dates drop!");
+    } else if (type === 'release') {
+        alert("📅 'No Signal Days' is currently in post-production. The exclusive dynamic countdown timer activates in Phase 2!");
+    }
+}
+
+
+// ================= MUSIC SCREEN =================
+
+function openMusicScreen() {
+    document.querySelectorAll(".profile-screen").forEach(section => {
+        section.classList.remove("active");
+        section.style.display = "none";
+    });
+
+    const screen = document.getElementById("music-screen");
+
+    if (screen) {
+        screen.classList.add("active");
+        document.body.classList.add("music-open");
+    }
+}
+
+function closeMusicScreen() {
+    const screen = document.getElementById("music-screen");
+
+    if (screen) {
+        screen.classList.remove("active");
+        document.body.classList.remove("music-open");
+    }
+}
+
+function searchSongs() {
+    const searchInput = document.getElementById("song-search");
+    const songs = document.querySelectorAll(".song-row");
+
+    if (!searchInput) return;
+
+    const searchTerm = searchInput.value.toLowerCase().trim();
+
+    let visibleSongs = 0;
+
+    songs.forEach(song => {
+        const title = song.dataset.title.toLowerCase();
+
+        if (title.includes(searchTerm)) {
+            song.style.display = "flex";
+            visibleSongs++;
+        } else {
+            song.style.display = "none";
+        }
+    });
+
+    const count = document.getElementById("song-count");
+
+    if (count) {
+        count.textContent =
+            `${visibleSongs} song${visibleSongs === 1 ? "" : "s"}`;
+    }
+}
+function closeSongPlayer() {
+    const player = document.getElementById("song-player");
+
+    if (player) {
+        player.classList.remove("active");
+    }
+
+    document.body.classList.remove("player-open");
+}
+
+
+function previousSong() {
+    if (!loadedTracks.length) return;
+
+    const currentIndex = loadedTracks.findIndex(track => track.id === activelyPlayingTrackId);
+    if (currentIndex === -1) return;
+
+    const previousIndex = (currentIndex - 1 + loadedTracks.length) % loadedTracks.length;
+    playSong(loadedTracks[previousIndex].id);
+}
+
+function nextSong() {
+    if (!loadedTracks.length) return;
+
+    const currentIndex = loadedTracks.findIndex(track => track.id === activelyPlayingTrackId);
+    if (currentIndex === -1) return;
+
+    const nextIndex = (currentIndex + 1) % loadedTracks.length;
+    playSong(loadedTracks[nextIndex].id);
+}
+
+function togglePlayer() {
+    const audio = document.getElementById("audio-player");
+    const playButton = document.getElementById("main-play-button");
+
+    if (!audio || !audio.src) return;
+
+    if (audio.paused) {
+        audio.play().catch(error => {
+            console.error("Audio playback error:", error);
+        });
+        if (playButton) playButton.textContent = "❚❚";
+    } else {
+        audio.pause();
+        if (playButton) playButton.textContent = "▶";
+    }
+}
+
+window.openMusicScreen = openMusicScreen;
+window.closeMusicScreen = closeMusicScreen;
+window.searchSongs = searchSongs;
+window.playSong = playSong;
+window.closeSongPlayer = closeSongPlayer;
+window.togglePlayer = togglePlayer;
+window.previousSong = previousSong;
+window.nextSong = nextSong;
+window.saveSongToSupabase = saveSongToSupabase;
+
+
+console.log("EDEN DEBUG - player classes on startup:", document.getElementById("song-player")?.className);
+
+
+async function editSongLyrics(songId) {
+    const editor = document.getElementById("lyrics-editor");
+    const titleElement = document.getElementById("lyrics-editor-title");
+    const lyricsInput = document.getElementById("lyrics-editor-input");
+    const message = document.getElementById("lyrics-editor-message");
+
+    if (!editor || !titleElement || !lyricsInput) return;
+
+    const { data: song, error } = await supabase
+        .from("song")
+        .select("id, title, lyrics")
+        .eq("id", songId)
+        .single();
+
+    if (error) {
+        console.error("Load lyrics error:", error);
+        alert("Could not load the song lyrics.");
+        return;
+    }
+
+    editor.dataset.songId = song.id;
+    titleElement.textContent = "Edit Lyrics — " + song.title;
+    lyricsInput.value = song.lyrics || "";
+
+    if (message) message.textContent = "";
+
+    editor.style.display = "block";
+    editor.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+window.editSongLyrics = editSongLyrics;
+
+
+async function deleteSong(songId) {
+    const confirmed = confirm(
+        "Are you sure you want to delete this song?"
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    const { data: song, error: songError } = await supabase
+        .from("song")
+        .select("id, title")
+        .eq("id", songId)
+        .single();
+
+    if (songError) {
+        console.error("Load song for deletion error:", songError);
+        alert("Could not find the song.");
+        return;
+    }
+
+    const { error: deleteError } = await supabase
+        .from("song")
+        .delete()
+        .eq("id", songId);
+
+    if (deleteError) {
+        console.error("Delete song error:", deleteError);
+        alert("Could not delete the song.");
+        return;
+    }
+
+    alert(`"${song.title}" was deleted successfully.`);
+
+    await loadDeveloperReleases();
+    await loadSongsFromSupabase();
+}
+
+window.deleteSong = deleteSong;
+
+
+async function loadFunVaultVideos() {
+    const list = document.getElementById("fun-vault-list");
+
+    if (!list) return;
+
+    const { data: videos, error } = await supabase
+        .from("fun_vault_videos")
+        .select("id, title, description, video_url, thumbnail_url, created_at, is_published")
+        ;
+
+    if (error) {
+        console.error("Load Fun Vault videos error:", error);
+        list.innerHTML = '<p class="dashboard-empty">Could not load Fun Vault videos.</p>';
+        return;
+    }
+
+    if (!videos?.length) {
+        list.innerHTML = '<p class="dashboard-empty">No Fun Vault videos yet.</p>';
+        return;
+    }
+
+    list.innerHTML = videos.map(video => `
+        <article class="developer-release-card">
+            <video class="dashboard-vault-video" controls playsinline preload="metadata" src="${escapeHtmlAttribute(video.video_url)}"></video>
+            <div>
+                <span class="eyebrow">${video.is_published ? "PUBLISHED" : "DRAFT"}</span>
+                <h3>${escapeHtml(video.title)}</h3>
+                <p>${escapeHtml(video.description || "")}</p>
+            </div>
+
+            <div class="live-control-actions">
+                <button type="button" class="secondary-btn" onclick="editFunVaultVideo('${video.id}')">✏️ Edit</button>
+                <button type="button" class="secondary-btn" onclick="deleteFunVaultVideo('${video.id}')">🗑️ Delete</button>
+            </div>
+        </article>
+    `).join("");
+}
+
+async function editFunVaultVideo(videoId) {
+    if (!videoId) return;
+
+    const { data: video, error } = await supabase
+        .from("fun_vault_videos")
+        .select("id, title, description, is_published")
+        .eq("id", videoId)
+        .single();
+
+    if (error || !video) {
+        console.error("Load Fun Vault video error:", error);
+        showMessage("Could not load video.");
+        return;
+    }
+
+    const titleInput = document.getElementById("fun-vault-title");
+    const descriptionInput = document.getElementById("fun-vault-description");
+    const publishedInput = document.getElementById("fun-vault-published");
+    const message = document.getElementById("fun-vault-save-message");
+
+    if (titleInput) titleInput.value = video.title || "";
+    if (descriptionInput) descriptionInput.value = video.description || "";
+    if (publishedInput) publishedInput.checked = !!video.is_published;
+
+    const button = document.getElementById("save-fun-vault-button");
+
+    if (button) {
+        button.textContent = "💾 Update Fun Vault Video";
+        button.onclick = () => updateFunVaultVideo(videoId);
+    }
+
+    if (message) {
+        message.textContent = "Editing this Fun Vault video."; 
+    }
+
+    document.getElementById("fun-vault-controls")?.scrollIntoView({
+        behavior: "smooth"
+    });
+}
+
+async function updateFunVaultVideo(videoId) {
+    if (!videoId) return;
+
+    const title = document.getElementById("fun-vault-title")?.value.trim();
+    const description = document.getElementById("fun-vault-description")?.value.trim() || "";
+    const isPublished = document.getElementById("fun-vault-published")?.checked ?? true;
+    const message = document.getElementById("fun-vault-save-message");
+
+    if (!title) {
+        if (message) message.textContent = "Please enter a video title.";
+        return;
+    }
+
+    const videoFile = document.getElementById("fun-vault-video-input")?.files?.[0];
+
+    let videoUrl;
+
+    if (videoFile) {
+        const { data: oldVideo } = await supabase
+            .from("fun_vault_videos")
+            .select("video_url")
+            .eq("id", videoId)
+            .single();
+
+        const fileExtension = videoFile.name.split(".").pop()?.toLowerCase() || "mp4";
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const filePath = `${user.id}/${crypto.randomUUID()}.${fileExtension}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from("fun-vault-videos")
+            .upload(filePath, videoFile, {
+                upsert: false,
+                contentType: videoFile.type
+            });
+
+        if (uploadError) {
+            console.error("Replacement video upload error:", uploadError);
+            if (message) message.textContent = "Could not upload replacement video.";
+            return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+            .from("fun-vault-videos")
+            .getPublicUrl(filePath);
+
+        videoUrl = publicUrlData?.publicUrl;
+
+        if (videoUrl && oldVideo?.video_url) {
+            const marker = "/storage/v1/object/public/fun-vault-videos/";
+            if (oldVideo.video_url.includes(marker)) {
+                const oldPath = decodeURIComponent(oldVideo.video_url.split(marker)[1]);
+                await supabase.storage.from("fun-vault-videos").remove([oldPath]);
+            }
+        }
+    }
+
+    const updateData = {
+        title,
+        description,
+        is_published: isPublished
+    };
+
+    if (videoUrl) updateData.video_url = videoUrl;
+
+    const { error } = await supabase
+        .from("fun_vault_videos")
+        .update(updateData)
+        .eq("id", videoId);
+
+    if (error) {
+        console.error("Update Fun Vault video error:", error);
+        if (message) message.textContent = "Could not update video.";
+        return;
+    }
+
+    if (message) message.textContent = "Fun Vault video updated successfully!";
+
+    document.getElementById("fun-vault-title").value = "";
+    document.getElementById("fun-vault-description").value = "";
+    document.getElementById("fun-vault-video-input").value = "";
+
+    const publishedInput = document.getElementById("fun-vault-published");
+    if (publishedInput) publishedInput.checked = true;
+
+    const button = document.getElementById("save-fun-vault-button");
+    if (button) {
+        button.textContent = "Upload Fun Vault Video";
+        button.onclick = saveFunVaultVideo;
+    }
+
+    await loadFunVaultVideos();
+}
+
+window.editFunVaultVideo = editFunVaultVideo;
+window.updateFunVaultVideo = updateFunVaultVideo;
+
+async function saveFunVaultVideo() {
+    const titleInput = document.getElementById("fun-vault-title");
+    const descriptionInput = document.getElementById("fun-vault-description");
+    const videoInput = document.getElementById("fun-vault-video-input");
+    const publishedInput = document.getElementById("fun-vault-published");
+    const message = document.getElementById("fun-vault-save-message");
+    const button = document.getElementById("save-fun-vault-button");
+
+    const title = titleInput?.value.trim();
+    const description = descriptionInput?.value.trim() || "";
+    const videoFile = videoInput?.files?.[0];
+    const isPublished = publishedInput?.checked ?? true;
+
+    if (!title) {
+        if (message) message.textContent = "Please enter a video title.";
+        return;
+    }
+
+    if (!videoFile) {
+        if (message) message.textContent = "Please choose a video file.";
+        return;
+    }
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+        if (message) message.textContent = "Developer session not found.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Uploading...";
+    }
+
+    const fileExtension =
+        videoFile.name.split(".").pop()?.toLowerCase() || "mp4";
+
+    const filePath =
+        `${user.id}/${crypto.randomUUID()}.${fileExtension}`;
+
+    const { error: uploadError } = await supabase.storage
+        .from("fun-vault-videos")
+        .upload(filePath, videoFile, {
+            upsert: false,
+            contentType: videoFile.type
+        });
+
+    if (uploadError) {
+        console.error("Fun Vault upload error:", uploadError);
+
+        if (message) {
+            message.textContent = "Could not upload the video.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Upload Fun Vault Video";
+        }
+
+        return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+        .from("fun-vault-videos")
+        .getPublicUrl(filePath);
+
+    const videoUrl = publicUrlData?.publicUrl;
+
+    if (!videoUrl) {
+        if (message) {
+            message.textContent = "Video uploaded, but its URL could not be created.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Upload Fun Vault Video";
+        }
+
+        return;
+    }
+
+    const { error: insertError } = await supabase
+        .from("fun_vault_videos")
+        .insert({
+            title,
+            description,
+            video_url: videoUrl,
+            thumbnail_url: "",
+            is_published: isPublished
+        });
+
+    if (insertError) {
+        console.error("Save Fun Vault video error:", insertError);
+
+        if (message) {
+            message.textContent = "Video uploaded, but its information could not be saved.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Upload Fun Vault Video";
+        }
+
+        return;
+    }
+
+    if (message) {
+        message.textContent = "Fun Vault video uploaded successfully!";
+    }
+
+    if (titleInput) titleInput.value = "";
+    if (descriptionInput) descriptionInput.value = "";
+    if (videoInput) videoInput.value = "";
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Upload Fun Vault Video";
+    }
+
+    await loadFunVaultVideos();
+}
+
+async function deleteFunVaultVideo(videoId) {
+    if (!videoId) return;
+
+    const confirmed = window.confirm(
+        "Delete this Fun Vault video?"
+    );
+
+    if (!confirmed) return;
+
+    const { data: video, error: videoError } = await supabase
+        .from("fun_vault_videos")
+        .select("video_url")
+        .eq("id", videoId)
+        .single();
+
+    if (videoError) {
+        console.error("Find Fun Vault video error:", videoError);
+        return;
+    }
+
+    const videoUrl = video?.video_url || "";
+    const marker = "/storage/v1/object/public/fun-vault-videos/";
+
+    if (videoUrl.includes(marker)) {
+        const filePath = decodeURIComponent(
+            videoUrl.split(marker)[1]
+        );
+
+        const { error: storageError } = await supabase.storage
+            .from("fun-vault-videos")
+            .remove([filePath]);
+
+        if (storageError) {
+            console.error("Delete Fun Vault file error:", storageError);
+        }
+    }
+
+    const { error: deleteError } = await supabase
+        .from("fun_vault_videos")
+        .delete()
+        .eq("id", videoId);
+
+    if (deleteError) {
+        console.error("Delete Fun Vault database record error:", deleteError);
+        return;
+    }
+
+    await loadFunVaultVideos();
+}
+
+window.loadFunVaultVideos = loadFunVaultVideos;
+window.saveFunVaultVideo = saveFunVaultVideo;
+window.deleteFunVaultVideo = deleteFunVaultVideo;
+
+
+async function loadDeveloperProfile() {
+    const displayNameInput = document.getElementById("profile-display-name");
+    const bioInput = document.getElementById("profile-bio");
+
+    if (!displayNameInput || !bioInput) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) return;
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("display_name, bio, avatar_url")
+        .eq("user_id", session.user.id)
+        .single();
+
+    if (error) {
+        console.error("Load developer profile error:", error);
+        return;
+    }
+
+    displayNameInput.value = profile.display_name || "";
+    bioInput.value = profile.bio || "";
+
+    updateDeveloperAvatar(profile.avatar_url || "");
+
+    await loadSocialLinksEditor(session.user.id);
+}
+
+function updateDeveloperAvatar(url) {
+    const image = document.getElementById("developer-profile-avatar");
+    const placeholder = document.getElementById("developer-profile-avatar-placeholder");
+
+    if (!image || !placeholder) return;
+
+    if (url) {
+        image.src = url;
+        image.style.display = "block";
+        placeholder.style.display = "none";
+    } else {
+        image.removeAttribute("src");
+        image.style.display = "none";
+        placeholder.style.display = "flex";
+    }
+}
+
+function addSocialLinkField(platform = "", url = "") {
+    const container = document.getElementById("social-links-editor");
+
+    if (!container) return;
+
+    const row = document.createElement("div");
+    row.className = "social-link-editor-row";
+
+    const platformInput = document.createElement("input");
+    platformInput.type = "text";
+    platformInput.className = "social-platform-input";
+    platformInput.placeholder = "Platform name";
+    platformInput.value = platform;
+
+    const urlInput = document.createElement("input");
+    urlInput.type = "url";
+    urlInput.className = "social-url-input";
+    urlInput.placeholder = "https://...";
+    urlInput.value = url;
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "secondary-btn remove-social-link-button";
+    removeButton.textContent = "Remove";
+
+    removeButton.addEventListener("click", () => {
+        row.remove();
+    });
+
+    row.appendChild(platformInput);
+    row.appendChild(urlInput);
+    row.appendChild(removeButton);
+
+    container.appendChild(row);
+}
+
+async function loadSocialLinksEditor(userId) {
+    const container = document.getElementById("social-links-editor");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const { data: links, error } = await supabase
+        .from("profile_social_links")
+        .select("id, platform_name, profile_url")
+        .eq("profile_user_id", userId)
+        .order("created_at", { ascending: true });
+
+    if (error) {
+        console.error("Load social links error:", error);
+        return;
+    }
+
+    if (!links?.length) {
+        addSocialLinkField();
+        return;
+    }
+
+    links.forEach(link => {
+        addSocialLinkField(link.platform_name, link.profile_url);
+    });
+}
+
+async function saveDeveloperProfile() {
+    const displayNameInput = document.getElementById("profile-display-name");
+    const bioInput = document.getElementById("profile-bio");
+    const avatarFileInput = document.getElementById("profile-avatar-file");
+    const message = document.getElementById("profile-save-message");
+    const button = document.getElementById("save-profile-button");
+
+    const displayName = displayNameInput?.value.trim();
+    const bio = bioInput?.value.trim() || "";
+
+    if (!displayName) {
+        if (message) message.textContent = "Please enter a display name.";
+        return;
+    }
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const userId = user?.id || developerUserId;
+
+    if (userError || !userId) {
+        console.error("Developer user error:", userError);
+        if (message) message.textContent = "Developer session not found.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Saving...";
+    }
+
+    let avatarUrl = null;
+
+    const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("user_id", userId)
+        .single();
+
+    avatarUrl = currentProfile?.avatar_url || null;
+
+    const avatarFile = avatarFileInput?.files?.[0];
+
+    if (avatarFile) {
+        const fileExtension = avatarFile.name.split(".").pop()?.toLowerCase() || "jpg";
+        const filePath = `${userId}/avatar.${fileExtension}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from("profiles-avatars")
+            .upload(filePath, avatarFile, {
+                upsert: true,
+                contentType: avatarFile.type
+            });
+
+        if (uploadError) {
+            console.error("Avatar upload error:", uploadError);
+
+            if (message) message.textContent = "Could not upload profile picture.";
+
+            if (button) {
+                button.disabled = false;
+                button.textContent = "Save Profile";
+            }
+
+            return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+            .from("profiles-avatars")
+            .getPublicUrl(filePath);
+
+        avatarUrl = publicUrlData?.publicUrl || avatarUrl;
+    }
+
+    const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+            display_name: displayName,
+            bio: bio,
+            avatar_url: avatarUrl
+        })
+        .eq("user_id", userId);
+
+    if (profileError) {
+        console.error("Save developer profile error:", profileError);
+
+        if (message) message.textContent = "Could not save the profile.";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Save Profile";
+        }
+
+        return;
+    }
+
+    const rows = Array.from(
+        document.querySelectorAll(".social-link-editor-row")
+    )
+    .map(row => {
+        const platform = row
+            .querySelector(".social-platform-input")
+            ?.value.trim();
+
+        const url = row
+            .querySelector(".social-url-input")
+            ?.value.trim();
+
+        return {
+            platform_name: platform,
+            profile_url: url
+        };
+    })
+    .filter(link => link.platform_name && link.profile_url);
+
+    const { error: deleteError } = await supabase
+        .from("profile_social_links")
+        .delete()
+        .eq("profile_user_id", userId);
+
+    if (deleteError) {
+        console.error("Delete old social links error:", deleteError);
+
+        if (message) {
+            message.textContent = "Profile saved, but old social links could not be updated.";
+        }
+    } else if (rows.length) {
+        const { error: insertError } = await supabase
+            .from("profile_social_links")
+            .insert(
+                rows.map(link => ({
+                    profile_user_id: userId,
+                    platform_name: link.platform_name,
+                    profile_url: link.profile_url
+                }))
+            );
+
+        if (insertError) {
+            console.error("Save social links error:", insertError);
+
+            if (message) {
+                message.textContent =
+                    "Profile saved, but social links could not be saved.";
+            }
+
+            if (button) {
+                button.disabled = false;
+                button.textContent = "Save Profile";
+            }
+
+            return;
+        }
+    }
+
+    updateDeveloperAvatar(avatarUrl);
+
+    if (message) message.textContent = "Profile saved successfully!";
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Save Profile";
+    }
+
+    if (avatarFileInput) {
+        avatarFileInput.value = "";
+    }
+}
+
+async function loadPublicProfile() {
+    const developerAccess = document.getElementById("developer-access-section");
+    const fanAccountProfile = document.getElementById("fan-account-profile-section");
+    const fanAccessSection = document.querySelector(".fan-access-section");
+
+    if (developerAccess) developerAccess.style.display = "none";
+    if (fanAccountProfile) fanAccountProfile.style.display = "none";
+    if (fanAccessSection) fanAccessSection.style.display = "block";
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (session?.user) {
+        const { data: currentProfile, error: currentProfileError } = await supabase
+            .from("profiles")
+            .select("role, display_name")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+        if (!currentProfileError && currentProfile?.role === "developer") {
+            if (developerAccess) developerAccess.style.display = "block";
+            if (fanAccessSection) fanAccessSection.style.display = "none";
+        }
+
+        if (!currentProfileError && currentProfile?.role === "fan") {
+            if (fanAccountProfile) fanAccountProfile.style.display = "block";
+            if (fanAccessSection) fanAccessSection.style.display = "none";
+
+            const fanName = document.getElementById("fan-profile-name");
+            const fanEmail = document.getElementById("fan-profile-email");
+
+            if (fanName) {
+                fanName.textContent = currentProfile.display_name || "Fan Account";
+            }
+
+            if (fanEmail) {
+                fanEmail.textContent = session.user.email || "";
+            }
+        }
+    }
+
+    const nameElement = document.getElementById("public-profile-name");
+    const bioElement = document.getElementById("public-profile-bio");
+    const avatarImage = document.getElementById("public-profile-avatar");
+    const avatarPlaceholder = document.getElementById("public-profile-avatar-placeholder");
+    const socialContainer = document.getElementById("public-social-links");
+
+    if (!nameElement || !bioElement || !socialContainer) return;
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, bio, avatar_url")
+        .eq("role", "developer")
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error("Public profile error:", error);
+        return;
+    }
+
+    if (!profile) return;
+
+    nameElement.textContent = profile.display_name || "Eden";
+    bioElement.textContent = profile.bio || "R&B Artist & Producer";
+
+    if (profile.avatar_url && avatarImage && avatarPlaceholder) {
+        avatarImage.src = profile.avatar_url;
+        avatarImage.style.display = "block";
+        avatarPlaceholder.style.display = "none";
+    } else if (avatarImage && avatarPlaceholder) {
+        avatarImage.removeAttribute("src");
+        avatarImage.style.display = "none";
+        avatarPlaceholder.style.display = "flex";
+    }
+
+    socialContainer.innerHTML = "";
+
+    const { data: links, error: linksError } = await supabase
+        .from("profile_social_links")
+        .select("platform_name, profile_url")
+        .eq("profile_user_id", profile.user_id)
+        .order("created_at", { ascending: true });
+
+    if (linksError) {
+        console.error("Public social links error:", linksError);
+        return;
+    }
+
+    if (!links?.length) {
+        const emptyMessage = document.createElement("p");
+        emptyMessage.textContent = "Social links coming soon.";
+        socialContainer.appendChild(emptyMessage);
+        return;
+    }
+
+    links.forEach(link => {
+        const anchor = document.createElement("a");
+
+        anchor.href = link.profile_url;
+        anchor.target = "_blank";
+        anchor.rel = "noopener";
+        anchor.textContent = link.platform_name;
+
+        socialContainer.appendChild(anchor);
+    });
+}
+
+window.loadDeveloperProfile = loadDeveloperProfile;
+window.saveDeveloperProfile = saveDeveloperProfile;
+window.addSocialLinkField = addSocialLinkField;
+
+
+async function openProfileScreen() {
+    const profileScreen = document.getElementById("profile-screen");
+    if (!profileScreen) return;
+
+    profileScreen.classList.add("active");
+    await loadPublicProfile();
+}
+
+window.openProfileScreen = openProfileScreen;
+window.loadPublicProfile = loadPublicProfile;
+
+function closeProfileScreen() {
+    const profileScreen = document.getElementById("profile-screen");
+
+    if (!profileScreen) return;
+
+    profileScreen.classList.remove("active");
+    profileScreen.style.display = "";
+}
+
+window.closeProfileScreen = closeProfileScreen;
+
+async function openDeveloperDashboard() {
+    const dashboard = document.getElementById("artist-dashboard");
+    if (!dashboard) return;
+
+    const authorized = await restoreDeveloperDashboard();
+
+    if (!authorized) {
+        showMessage("Developer access required.");
+        return;
+    }
+
+    const profileScreen = document.getElementById("profile-screen");
+    if (profileScreen) {
+        profileScreen.classList.remove("active");
+        profileScreen.style.display = "none";
+    }
+
+    dashboard.style.display = "block";
+
+    if (typeof loadFanVaultDashboardEvents === "function") {
+        loadFanVaultDashboardEvents();
+    }
+}
+
+window.openDeveloperDashboard = openDeveloperDashboard;
+
+function closeDeveloperDashboard() {
+    const dashboard = document.getElementById("artist-dashboard");
+    if (dashboard) {
+        dashboard.style.display = "none";
+    }
+
+    const profileScreen = document.getElementById("profile-screen");
+    if (profileScreen) {
+        profileScreen.style.display = "";
+        profileScreen.classList.add("active");
+        loadPublicProfile();
+    }
+}
+
+window.closeDeveloperDashboard = closeDeveloperDashboard;
+
+async function developerLogout() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+        console.error("Developer logout error:", error);
+        return;
+    }
+
+    developerUserId = null;
+
+    const dashboard = document.getElementById("artist-dashboard");
+    if (dashboard) {
+        dashboard.style.display = "none";
+    }
+
+    const loginPanel = document.getElementById("developer-login");
+    if (loginPanel) {
+        loginPanel.style.display = "block";
+    }
+
+    const dashboardHeader = document.getElementById("developer-dashboard-header");
+    if (dashboardHeader) {
+        dashboardHeader.style.display = "none";
+    }
+
+    const controls = document.getElementById("developer-controls");
+    if (controls) {
+        controls.style.display = "none";
+    }
+
+    const profileScreen = document.getElementById("profile-screen");
+    if (profileScreen) {
+        profileScreen.style.display = "";
+        profileScreen.classList.add("active");
+    }
+}
+
+window.developerLogout = developerLogout;
+
+async function saveEditedLyrics() {
+    const editor = document.getElementById("lyrics-editor");
+    const lyricsInput = document.getElementById("lyrics-editor-input");
+    const message = document.getElementById("lyrics-editor-message");
+    const button = document.getElementById("save-lyrics-button");
+
+    if (!editor || !lyricsInput) return;
+
+    const songId = editor.dataset.songId;
+    const lyrics = lyricsInput.value;
+
+    if (!songId) {
+        if (message) message.textContent = "No song selected.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Saving...";
+    }
+
+    const { error } = await supabase
+        .from("song")
+        .update({ lyrics })
+        .eq("id", songId);
+
+    if (error) {
+        console.error("Save edited lyrics error:", error);
+
+        if (message) {
+            message.textContent = "Could not save the lyrics.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Save Lyrics";
+        }
+
+        return;
+    }
+
+    if (message) {
+        message.textContent = "Lyrics saved successfully!";
+    }
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Save Lyrics";
+    }
+
+    await loadDeveloperReleases();
+    await loadSongsFromSupabase();
+}
+
+function cancelLyricsEdit() {
+    const editor = document.getElementById("lyrics-editor");
+
+    if (!editor) return;
+
+    editor.style.display = "none";
+    editor.dataset.songId = "";
+
+    const lyricsInput = document.getElementById("lyrics-editor-input");
+    const message = document.getElementById("lyrics-editor-message");
+
+    if (lyricsInput) lyricsInput.value = "";
+    if (message) message.textContent = "";
+}
+
+window.saveEditedLyrics = saveEditedLyrics;
+window.cancelLyricsEdit = cancelLyricsEdit;
+
+async function editSong(songId) {
+    const editor = document.getElementById("song-editor");
+    const titleElement = document.getElementById("song-editor-title");
+    const titleInput = document.getElementById("edit-song-title");
+    const artistInput = document.getElementById("edit-song-artist");
+    const audioInput = document.getElementById("edit-song-audio");
+    const coverInput = document.getElementById("edit-song-cover");
+    const videoInput = document.getElementById("edit-song-video");
+    const lyricsInput = document.getElementById("edit-song-lyrics");
+    const message = document.getElementById("song-editor-message");
+
+    if (!editor || !titleInput || !artistInput || !lyricsInput) return;
+
+    const { data: song, error } = await supabase
+        .from("song")
+        .select("id, title, artist, lyrics")
+        .eq("id", songId)
+        .single();
+
+    if (error) {
+        console.error("Load song for editing error:", error);
+        alert("Could not load the song.");
+        return;
+    }
+
+    editor.dataset.songId = song.id;
+
+    if (titleElement) {
+        titleElement.textContent = "Edit Song — " + song.title;
+    }
+
+    titleInput.value = song.title || "";
+    artistInput.value = song.artist || "Eden";
+    lyricsInput.value = song.lyrics || "";
+
+    if (audioInput) audioInput.value = "";
+    if (coverInput) coverInput.value = "";
+    if (videoInput) videoInput.value = "";
+    if (message) message.textContent = "";
+
+    editor.style.display = "block";
+    editor.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+    });
+}
+
+window.editSong = editSong;
+
+async function saveEditedSong() {
+    const editor = document.getElementById("song-editor");
+    const titleInput = document.getElementById("edit-song-title");
+    const artistInput = document.getElementById("edit-song-artist");
+    const audioInput = document.getElementById("edit-song-audio");
+    const coverInput = document.getElementById("edit-song-cover");
+    const videoInput = document.getElementById("edit-song-video");
+    const lyricsInput = document.getElementById("edit-song-lyrics");
+    const message = document.getElementById("song-editor-message");
+    const button = document.getElementById("save-song-edit-button");
+
+    if (!editor || !titleInput || !artistInput || !lyricsInput) return;
+
+    const songId = editor.dataset.songId;
+    const title = titleInput.value.trim();
+    const artist = artistInput.value.trim() || "Eden";
+    const lyrics = lyricsInput.value;
+
+    const audioFile = audioInput?.files[0];
+    const coverFile = coverInput?.files[0];
+    const videoFile = videoInput?.files[0];
+
+    if (!songId) {
+        if (message) message.textContent = "No song selected.";
+        return;
+    }
+
+    if (!title) {
+        if (message) message.textContent = "Song title is required.";
+        return;
+    }
+
+    try {
+        if (button) {
+            button.disabled = true;
+            button.textContent = "Saving...";
+        }
+
+        if (message) {
+            message.textContent = "Saving song changes...";
+        }
+
+        const updateData = {
+            title: title,
+            artist: artist,
+            lyrics: lyrics
+        };
+
+        if (audioFile) {
+            const safeTitle = title
+                .replace(/[^a-zA-Z0-9-_]/g, "_")
+                .replace(/_+/g, "_");
+
+            const timestamp = Date.now();
+
+            const audioExtension =
+                audioFile.name.substring(audioFile.name.lastIndexOf("."));
+
+            const audioPath =
+                `${timestamp}_${safeTitle}_audio${audioExtension}`;
+
+            const { error: audioUploadError } = await supabase
+                .storage
+                .from("song")
+                .upload(audioPath, audioFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (audioUploadError) {
+                throw audioUploadError;
+            }
+
+        let videoUrl = "";
+
+        if (videoFile) {
+            const videoExtension = videoFile.name.substring(videoFile.name.lastIndexOf("."));
+            const videoPath = `${timestamp}_${safeTitle}_video${videoExtension}`;
+
+            const { error: videoUploadError } = await supabase
+                .storage
+                .from("song")
+                .upload(videoPath, videoFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (videoUploadError) {
+                throw videoUploadError;
+            }
+
+            const { data: videoPublicData } = supabase
+                .storage
+                .from("song")
+                .getPublicUrl(videoPath);
+
+            videoUrl = videoPublicData.publicUrl;
+        }
+
+            const { data: audioPublicData } = supabase
+                .storage
+                .from("song")
+                .getPublicUrl(audioPath);
+
+            updateData.audio_url = audioPublicData.publicUrl;
+
+            const audio = new Audio();
+            audio.src = audioPublicData.publicUrl;
+
+            updateData.duration = await new Promise(resolve => {
+                audio.addEventListener("loadedmetadata", () => {
+                    resolve(Math.round(audio.duration));
+                });
+
+                audio.addEventListener("error", () => {
+                    resolve(0);
+                });
+            });
+        }
+
+        if (coverFile) {
+            const safeTitle = title
+                .replace(/[^a-zA-Z0-9-_]/g, "_")
+                .replace(/_+/g, "_");
+
+            const timestamp = Date.now();
+
+            const coverExtension =
+                coverFile.name.substring(coverFile.name.lastIndexOf("."));
+
+            const coverPath =
+                `${timestamp}_${safeTitle}_cover${coverExtension}`;
+
+            const { error: coverUploadError } = await supabase
+                .storage
+                .from("song")
+                .upload(coverPath, coverFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (coverUploadError) {
+                throw coverUploadError;
+            }
+
+            const { data: coverPublicData } = supabase
+                .storage
+                .from("song")
+                .getPublicUrl(coverPath);
+
+            updateData.cover_url = coverPublicData.publicUrl;
+        }
+
+        if (videoFile) {
+            const safeTitle = title
+                .replace(/[^a-zA-Z0-9-_]/g, "_")
+                .replace(/_+/g, "_");
+
+            const timestamp = Date.now();
+
+            const videoExtension =
+                videoFile.name.substring(videoFile.name.lastIndexOf("."));
+
+            const videoPath =
+                `${timestamp}_${safeTitle}_video${videoExtension}`;
+
+            const { error: videoUploadError } = await supabase
+                .storage
+                .from("song")
+                .upload(videoPath, videoFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (videoUploadError) {
+                throw videoUploadError;
+            }
+
+            const { data: videoPublicData } = supabase
+                .storage
+                .from("song")
+                .getPublicUrl(videoPath);
+
+            updateData.video_url = videoPublicData.publicUrl;
+        }
+
+        const { error: updateError } = await supabase
+            .from("song")
+            .update(updateData)
+            .eq("id", songId);
+
+        if (updateError) {
+            throw updateError;
+        }
+
+        if (message) {
+            message.textContent = "Song changes saved successfully!";
+        }
+
+        if (audioInput) audioInput.value = "";
+        if (coverInput) coverInput.value = "";
+    if (videoInput) videoInput.value = "";
+
+        await loadDeveloperReleases();
+        await loadSongsFromSupabase();
+
+    } catch (error) {
+        console.error("Save edited song error:", error);
+
+        if (message) {
+            message.textContent = "Could not save the song changes.";
+        }
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Save Song Changes";
+        }
+    }
+}
+
+function cancelSongEdit() {
+    const editor = document.getElementById("song-editor");
+
+    if (!editor) return;
+
+    editor.style.display = "none";
+    editor.dataset.songId = "";
+
+    const titleInput = document.getElementById("edit-song-title");
+    const artistInput = document.getElementById("edit-song-artist");
+    const audioInput = document.getElementById("edit-song-audio");
+    const coverInput = document.getElementById("edit-song-cover");
+    const videoInput = document.getElementById("edit-song-video");
+    const lyricsInput = document.getElementById("edit-song-lyrics");
+    const message = document.getElementById("song-editor-message");
+
+    if (titleInput) titleInput.value = "";
+    if (artistInput) artistInput.value = "Eden";
+    if (audioInput) audioInput.value = "";
+    if (coverInput) coverInput.value = "";
+    if (videoInput) videoInput.value = "";
+    if (lyricsInput) lyricsInput.value = "";
+    if (message) message.textContent = "";
+}
+
+window.saveEditedSong = saveEditedSong;
+window.cancelSongEdit = cancelSongEdit;
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function escapeHtmlAttribute(value) {
+    return escapeHtml(value);
+}
+
+async function loadPublicReels() {
+    const container = document.getElementById("public-reels-container");
+    if (!container) return;
+
+    const { data: vaultVideos, error: vaultError } = await supabase
+        .from("fun_vault_videos")
+        .select("id, title, description, video_url, thumbnail_url, created_at")
+        .eq("is_published", true);
+
+    const { data: linkedVideos, error: linkedError } = await supabase
+        .from("linked_account_content")
+        .select("id, title, description, video_url, thumbnail_url, created_at, destination")
+        .eq("status", "approved")
+        .in("destination", ["home", "both"])
+
+    if (vaultError || linkedError) {
+        console.error("Public video load error:", vaultError || linkedError);
+        container.innerHTML =
+            '<p class="dashboard-empty">Could not load reels.</p>';
+        return;
+    }
+
+    const videos = [
+        ...(vaultVideos || []).map(video => ({ ...video, sourceLabel: "FUN VAULT" })),
+        ...(linkedVideos || []).map(video => ({ ...video, sourceLabel: "LINKED ACCOUNT" }))
+    ]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 5);
+
+    if (!videos.length) {
+        container.innerHTML =
+            '<p class="dashboard-empty">No reels available yet.</p>';
+        return;
+    }
+
+    container.innerHTML = videos.map(video => `
+        <article class="reel-card" id="fun-vault-video-${video.id}">
+            <video
+                class="public-reel-video"
+                controls
+                playsinline
+                preload="metadata"
+                ${video.thumbnail_url ? `poster="${escapeHtmlAttribute(video.thumbnail_url)}"` : ""}
+                src="${escapeHtmlAttribute(video.video_url)}"
+            >
+                Your browser does not support video playback.
+            </video>
+            <div class="reel-overlay">
+                <span>${escapeHtml(video.sourceLabel)}</span>
+                <h3>${escapeHtml(video.title || "Untitled video")}</h3>
+                ${video.description ? `<p>${escapeHtml(video.description)}</p>` : ""}
+            </div>
+        </article>
+    `).join("");
+
+    console.log("Public reels loaded:", videos);
+}
+window.loadPublicReels = loadPublicReels;
+setupHomeTikTokReelViewer();
+
+
+function showFanRegister() {
+    const registerPanel = document.getElementById("fan-register-panel");
+    const loginPanel = document.getElementById("fan-login-panel");
+    const accountPanel = document.getElementById("fan-account-panel");
+
+    if (registerPanel) registerPanel.style.display = "block";
+    if (loginPanel) loginPanel.style.display = "none";
+    if (accountPanel) accountPanel.style.display = "none";
+}
+
+function showFanLogin() {
+    const registerPanel = document.getElementById("fan-register-panel");
+    const loginPanel = document.getElementById("fan-login-panel");
+    const accountPanel = document.getElementById("fan-account-panel");
+
+    if (registerPanel) registerPanel.style.display = "none";
+    if (loginPanel) loginPanel.style.display = "block";
+    if (accountPanel) accountPanel.style.display = "none";
+}
+
+async function registerFanAccount() {
+    const nameInput = document.getElementById("fan-register-name");
+    const emailInput = document.getElementById("fan-register-email");
+    const passwordInput = document.getElementById("fan-register-password");
+    const message = document.getElementById("fan-register-message");
+    const button = document.getElementById("fan-register-button");
+
+    const displayName = nameInput?.value.trim();
+    const email = emailInput?.value.trim();
+    const password = passwordInput?.value;
+
+    if (!displayName) {
+        if (message) message.textContent = "Please enter your display name.";
+        return;
+    }
+
+    if (!email) {
+        if (message) message.textContent = "Please enter your email.";
+        return;
+    }
+
+    if (!password || password.length < 6) {
+        if (message) message.textContent = "Password must be at least 6 characters.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Creating account...";
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+        email,
+        password
+    });
+
+    if (error) {
+        console.error("Fan registration error:", error);
+        if (message) message.textContent = error.message;
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Create Account";
+        }
+        return;
+    }
+
+    const user = data?.user;
+
+    if (!user) {
+        if (message) message.textContent = "Account could not be created.";
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Create Account";
+        }
+        return;
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+
+    if (!sessionData?.session) {
+        if (message) {
+            message.textContent = "Account created. Please confirm your email, then sign in to finish setting up your fan profile.";
+        }
+
+        if (nameInput) nameInput.value = "";
+        if (emailInput) emailInput.value = "";
+        if (passwordInput) passwordInput.value = "";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Create Account";
+        }
+
+        return;
+    }
+
+    const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+            user_id: user.id,
+            display_name: displayName,
+            bio: "",
+            avatar_url: "",
+            role: "fan"
+        });
+
+    if (profileError) {
+        console.error("Fan profile creation error:", profileError);
+        if (message) message.textContent = "Account created, but the fan profile could not be saved.";
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Create Account";
+        }
+        return;
+    }
+
+    if (message) message.textContent = "Account created successfully! You can now enter the Fan Vault.";
+
+    if (nameInput) nameInput.value = "";
+    if (emailInput) emailInput.value = "";
+    if (passwordInput) passwordInput.value = "";
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Create Account";
+    }
+
+    await loadFanAccount();
+}
+
+async function loginFanAccount() {
+    const emailInput = document.getElementById("fan-login-email");
+    const passwordInput = document.getElementById("fan-login-password");
+    const message = document.getElementById("fan-login-message");
+    const button = document.getElementById("fan-login-button");
+
+    const email = emailInput?.value.trim();
+    const password = passwordInput?.value;
+
+    if (!email || !password) {
+        if (message) message.textContent = "Enter your email and password.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Signing in...";
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (error) {
+        console.error("Fan login error:", error);
+
+        if (message) {
+            message.textContent = error.message;
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Sign In";
+        }
+
+        return;
+    }
+
+    const user = data?.user;
+
+    if (!user) {
+        if (message) {
+            message.textContent = "Login failed.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Sign In";
+        }
+
+        return;
+    }
+    let { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, avatar_url, role")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if (profileError) {
+        console.error("Fan profile lookup error:", profileError);
+
+        if (message) message.textContent = "Could not check your fan profile.";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Sign In";
+        }
+
+        return;
+    }
+
+    if (!profile) {
+        const displayName = user.email?.split("@")[0] || "Fan";
+
+        const { data: newProfile, error: createProfileError } = await supabase
+            .from("profiles")
+            .insert({
+                user_id: user.id,
+                display_name: displayName,
+                bio: "",
+                avatar_url: "",
+                role: "fan"
+            })
+            .select("user_id, display_name, avatar_url, role")
+            .single();
+
+        if (createProfileError) {
+            console.error("Fan profile creation after login error:", createProfileError);
+
+            if (message) message.textContent = "Your account is confirmed, but your fan profile could not be created.";
+
+            if (button) {
+                button.disabled = false;
+                button.textContent = "Sign In";
+            }
+
+            return;
+        }
+
+        profile = newProfile;
+    }
+
+    if (profile.role !== "fan") {
+        await supabase.auth.signOut();
+
+        if (message) message.textContent = "This account is not registered as a fan account.";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Sign In";
+        }
+
+        return;
+    }
+    if (passwordInput) passwordInput.value = "";
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Sign In";
+    }
+
+    await loadFanAccount();
+}
+
+async function loadFanAccount() {
+    const welcomeCard = document.getElementById("welcome-card");
+
+    if (welcomeCard) welcomeCard.style.display = "block";
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+        showFanRegister();
+        return;
+    }
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, avatar_url, role")
+        .eq("user_id", session.user.id)
+        .single();
+
+    if (error) {
+        console.error("Fan profile load error:", error);
+        return;
+    }
+
+    if (!profile || profile.role !== "fan") {
+        showFanRegister();
+        return;
+    }
+
+    if (welcomeCard) welcomeCard.style.display = "none";
+
+    const registerPanel = document.getElementById("fan-register-panel");
+    const loginPanel = document.getElementById("fan-login-panel");
+    const accountPanel = document.getElementById("fan-account-panel");
+    const nameElement = document.getElementById("fan-account-name");
+    const emailElement = document.getElementById("fan-account-email");
+    const avatarElement = document.getElementById("fan-account-avatar");
+    const avatarPlaceholder = document.getElementById("fan-account-avatar-placeholder");
+
+    if (registerPanel) registerPanel.style.display = "none";
+    if (loginPanel) loginPanel.style.display = "none";
+    if (accountPanel) accountPanel.style.display = "block";
+
+    if (nameElement) {
+        nameElement.textContent =
+            `Welcome, ${profile.display_name || "Fan"}`;
+    }
+
+    if (emailElement) {
+        emailElement.textContent =
+            session.user.email || "";
+    }
+
+    if (avatarElement && profile.avatar_url) {
+        avatarElement.src = profile.avatar_url;
+        avatarElement.style.display = "block";
+        if (avatarPlaceholder) avatarPlaceholder.style.display = "none";
+    } else if (avatarElement) {
+        avatarElement.style.display = "none";
+        if (avatarPlaceholder) avatarPlaceholder.style.display = "flex";
+    }
+
+    setupFanAvatarUpload();
+}
+
+async function uploadFanAvatar(file) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user || !file) return;
+
+    const message = document.getElementById("fan-account-message");
+    if (message) message.textContent = "Uploading profile picture...";
+
+    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const filePath = session.user.id + "/avatar." + extension;
+
+    const { error: uploadError } = await supabase.storage
+        .from("profiles-avatars")
+        .upload(filePath, file, { upsert: true });
+
+    if (uploadError) {
+        console.error("Fan avatar upload error:", uploadError);
+        if (message) message.textContent = "Could not upload profile picture.";
+        return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+        .from("profiles-avatars")
+        .getPublicUrl(filePath);
+
+    const avatarUrl = publicUrlData.publicUrl;
+
+    const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl })
+        .eq("user_id", session.user.id);
+
+    if (profileError) {
+        console.error("Fan avatar profile update error:", profileError);
+        if (message) message.textContent = "Picture uploaded, but profile update failed.";
+        return;
+    }
+
+    const avatar = document.getElementById("fan-account-avatar");
+    const placeholder = document.getElementById("fan-account-avatar-placeholder");
+
+    if (avatar) {
+        avatar.src = avatarUrl;
+        avatar.style.display = "block";
+    }
+
+    if (placeholder) placeholder.style.display = "none";
+    if (message) message.textContent = "Profile picture updated.";
+}
+
+function setupFanAvatarUpload() {
+    const input = document.getElementById("fan-avatar-file");
+    if (!input || input.dataset.bound === "true") return;
+
+    input.dataset.bound = "true";
+    input.addEventListener("change", () => {
+        const file = input.files?.[0];
+        if (file) uploadFanAvatar(file);
+    });
+}
+
+async function fanLogout() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+        console.error("Fan logout error:", error);
+        return;
+    }
+
+    showFanRegister();
+}
+
+function closeFanAccountScreen() {
+    const screen = document.getElementById("fan-account-screen");
+
+    if (screen) {
+        screen.classList.remove("active");
+        screen.style.display = "none";
+    }
+}
+
+async function openFanVault() {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+        openFanAccountScreen();
+        return;
+    }
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("user_id, role")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+    if (error || !profile || profile.role !== "fan") {
+        openFanAccountScreen();
+        return;
+    }
+
+    const screen = document.getElementById("fan-vault-screen");
+
+    if (!screen) {
+        console.error("Fan Vault screen not found.");
+        return;
+    }
+
+    const profileScreen = document.getElementById("profile-screen");
+    if (profileScreen) {
+        profileScreen.classList.remove("active");
+        profileScreen.style.display = "none";
+    }
+
+    const fanAccountScreen = document.getElementById("fan-account-screen");
+    if (fanAccountScreen) {
+        fanAccountScreen.classList.remove("active");
+        fanAccountScreen.style.display = "none";
+    }
+
+    screen.classList.add("active");
+    screen.style.display = "block";
+
+    await loadFanVaultVideos();
+    await loadFanVaultUpcomingEvents();
+}
+
+window.showFanRegister = showFanRegister;
+window.showFanLogin = showFanLogin;
+window.registerFanAccount = registerFanAccount;
+window.loginFanAccount = loginFanAccount;
+window.loadFanAccount = loadFanAccount;
+window.fanLogout = fanLogout;
+window.openFanVault = openFanVault;
+
+
+async function openFanAccountScreen() {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (session?.user) {
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("user_id, role")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+        if (profile?.role === "fan") {
+            await openFanVault();
+            return;
+        }
+    }
+
+    const screen = document.getElementById("fan-account-screen");
+
+    if (!screen) {
+        console.error("Fan account screen not found.");
+        return;
+    }
+
+    closeProfileScreen();
+
+    screen.classList.add("active");
+    screen.style.display = "block";
+
+    await loadFanAccount();
+}
+
+window.openFanAccountScreen = openFanAccountScreen;
+
+
+
+function closeFanVault() {
+    const screen = document.getElementById("fan-vault-screen");
+
+    if (screen) {
+        screen.classList.remove("active");
+        screen.style.display = "none";
+    }
+
+    const home = document.getElementById("home-screen");
+
+    if (home) {
+        home.classList.add("active");
+        home.style.display = "block";
+    }
+
+    window.scrollTo(0, 0);
+}
+
+window.closeFanVault = closeFanVault;
+
+
+/* ================= FAN VAULT ENGAGEMENT ================= */
+
+async function getFanVaultEngagement(videoId) {
+    if (!videoId) {
+        return { likes: 0, comments: 0, saves: 0, liked: false, saved: false };
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const [
+        { count: likeCount, error: likeError },
+        { count: commentCount, error: commentError },
+        { count: saveCount, error: saveError }
+    ] = await Promise.all([
+        supabase
+            .from("fun_vault_likes")
+            .select("*", { count: "exact", head: true })
+            .eq("video_id", videoId),
+
+        supabase
+            .from("fun_vault_comments")
+            .select("*", { count: "exact", head: true })
+            .eq("video_id", videoId),
+
+        supabase
+            .from("fun_vault_saves")
+            .select("*", { count: "exact", head: true })
+            .eq("video_id", videoId)
+    ]);
+
+    if (likeError) console.error("Like count error:", likeError);
+    if (commentError) console.error("Comment count error:", commentError);
+    if (saveError) console.error("Save count error:", saveError);
+
+    let liked = false;
+    let saved = false;
+
+    if (user) {
+        const [
+            { data: userLike, error: userLikeError },
+            { data: userSave, error: userSaveError }
+        ] = await Promise.all([
+            supabase
+                .from("fun_vault_likes")
+                .select("id")
+                .eq("video_id", videoId)
+                .eq("user_id", user.id)
+                .maybeSingle(),
+
+            supabase
+                .from("fun_vault_saves")
+                .select("id")
+                .eq("video_id", videoId)
+                .eq("user_id", user.id)
+                .maybeSingle()
+        ]);
+
+        if (userLikeError) console.error("User like state error:", userLikeError);
+        if (userSaveError) console.error("User save state error:", userSaveError);
+
+        liked = !!userLike;
+        saved = !!userSave;
+    }
+
+    return {
+        likes: likeCount || 0,
+        comments: commentCount || 0,
+        saves: saveCount || 0,
+        liked,
+        saved
+    };
+}
+
+
+async function toggleFunVaultLike(videoId) {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        openFanAccountScreen();
+        return;
+    }
+
+    const { data: existingLike } = await supabase
+        .from("fun_vault_likes")
+        .select("id")
+        .eq("video_id", videoId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if (existingLike) {
+        const { error } = await supabase
+            .from("fun_vault_likes")
+            .delete()
+            .eq("id", existingLike.id);
+
+        if (error) {
+            console.error("Unlike error:", error);
+            return;
+        }
+    } else {
+        const { error } = await supabase
+            .from("fun_vault_likes")
+            .insert({
+                video_id: videoId,
+                user_id: user.id
+            });
+
+        if (error) {
+            console.error("Like error:", error); alert("LIKE ERROR: " + JSON.stringify(error));
+            return;
+        }
+    }
+
+    await loadFanVaultVideos();
+    await loadFanVaultUpcomingEvents();
+}
+
+
+async function toggleFunVaultSave(videoId) {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        openFanAccountScreen();
+        return;
+    }
+
+    const { data: existingSave } = await supabase
+        .from("fun_vault_saves")
+        .select("id")
+        .eq("video_id", videoId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+    if (existingSave) {
+        const { error } = await supabase
+            .from("fun_vault_saves")
+            .delete()
+            .eq("id", existingSave.id);
+
+        if (error) {
+            console.error("Unsave error:", error);
+            return;
+        }
+    } else {
+        const { error } = await supabase
+            .from("fun_vault_saves")
+            .insert({
+                video_id: videoId,
+                user_id: user.id
+            });
+
+        if (error) {
+            console.error("Save error:", error);
+            return;
+        }
+    }
+
+    await loadFanVaultVideos();
+    await loadFanVaultLiveEvent();
+    await loadFanVaultUpcomingEvents();
+}
+
+
+async function showFunVaultComments(videoId) {
+    const { data: comments, error } = await supabase
+        .from("fun_vault_comments")
+        .select("id, user_id, comment, created_at")
+        .eq("video_id", videoId)
+
+    if (error) {
+        console.error("Load comments error:", error);
+        alert("Could not load comments.");
+        return;
+    }
+
+    let panel = document.getElementById("fan-vault-comments-panel");
+
+    if (!panel) {
+        panel = document.createElement("div");
+        panel.id = "fan-vault-comments-panel";
+        panel.innerHTML = `
+            <div class="fan-vault-comments-overlay" onclick="closeFanVaultComments()"></div>
+            <div class="fan-vault-comments-sheet">
+                <div class="fan-vault-comments-header">
+                    <strong>Comments</strong>
+                    <button type="button" onclick="closeFanVaultComments()">✕</button>
+                </div>
+                <div id="fan-vault-comments-list"></div>
+            </div>
+        `;
+        document.body.appendChild(panel);
+    }
+
+    const list = document.getElementById("fan-vault-comments-list");
+
+    list.innerHTML = comments?.length
+        ? comments.map(item => `
+            <div class="fan-vault-comment-item">
+                <p>${item.comment}</p>
+            </div>
+        `).join("")
+        : `<div class="fan-vault-no-comments">No comments yet.</div>`;
+
+    panel.classList.add("active");
+}
+
+function closeFanVaultComments() {
+    const panel = document.getElementById("fan-vault-comments-panel");
+    if (panel) panel.classList.remove("active");
+}
+
+window.closeFanVaultComments = closeFanVaultComments;
+
+
+async function addFunVaultComment(videoId) {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        openFanAccountScreen();
+        return;
+    }
+
+    const comment = window.prompt("Write your comment:");
+
+    if (!comment || !comment.trim()) {
+        return;
+    }
+
+    const { error } = await supabase
+        .from("fun_vault_comments")
+        .insert({
+            video_id: videoId,
+            user_id: user.id,
+            comment: comment.trim()
+        });
+
+    if (error) {
+        console.error("Add comment error:", error);
+        alert("Could not post your comment.");
+        return;
+    }
+
+    await loadFanVaultVideos();
+    await loadFanVaultLiveEvent();
+    await loadFanVaultUpcomingEvents();
+}
+
+
+window.toggleFunVaultLike = toggleFunVaultLike;
+window.toggleFunVaultSave = toggleFunVaultSave;
+window.showFunVaultComments = showFunVaultComments;
+window.addFunVaultComment = addFunVaultComment;
+
+
+/* ================= FAN VAULT REELS WITH ENGAGEMENT ================= */
+
+async function loadFanVaultVideos() {
+    const container = document.getElementById("fan-vault-videos");
+
+    if (!container) return;
+
+    const { data: videos, error } = await supabase
+        .from("fun_vault_videos")
+        .select("id, title, description, video_url, thumbnail_url, created_at")
+        .eq("is_published", true)
+
+    if (error) {
+        console.error("Fan Vault videos error:", error);
+        container.innerHTML =
+            '<p class="dashboard-empty">Could not load Fan Vault videos.</p>';
+        return;
+    }
+
+    if (!videos?.length) {
+        container.innerHTML =
+            '<p class="dashboard-empty">No exclusive videos yet.</p>';
+        return;
+    }
+
+    const cards = await Promise.all(
+        videos.map(async video => {
+            const engagement = await getFanVaultEngagement(video.id);
+
+            return `
+                <article class="reel-card">
+
+                    <video
+                        class="reel-video"
+                        controls
+                        playsinline
+                        preload="metadata"
+                        ${video.thumbnail_url ? `poster="${escapeHtmlAttribute(video.thumbnail_url)}"` : ""}
+                        src="${escapeHtmlAttribute(video.video_url)}"
+                    ></video>
+
+                    <div class="reel-info">
+                        <h3>${escapeHtml(video.title)}</h3>
+
+                        <p>
+                            ${escapeHtml(video.description || "")}
+                        </p>
+
+                        <div class="reel-engagement">
+
+                            <button
+                                type="button"
+                                onclick="toggleFunVaultLike('${video.id}')"
+                            >
+                                ${engagement.liked ? "❤️" : "🤍"}
+                                ${engagement.likes}
+                            </button>
+
+                            <button
+                                type="button"
+                                onclick="addFunVaultComment('${video.id}')"
+                            >
+                                💬 ${engagement.comments}
+                            </button>
+
+                            <button
+                                type="button"
+                                onclick="toggleFunVaultSave('${video.id}')"
+                            >
+                                ${engagement.saved ? "🔖" : "📑"}
+                                ${engagement.saves}
+                            </button>
+                            <button
+                                type="button"
+                                onclick="showFunVaultComments('${video.id}')"
+                            >
+                                View
+                            </button>
+
+                            <button
+                                type="button"
+                                onclick="shareFunVaultVideo('${video.id}')"
+                            >
+                                ↗️ Share
+                            </button>
+                        </div>
+                    </div>
+
+                </article>
+            `;
+        })
+    );
+
+    container.innerHTML = cards.join("");
+    setupFanVaultReelAutoplay();
+    setupFanVaultReelTap();
+    setupFanVaultDoubleTapLike();
+}
+
+window.loadFanVaultVideos = loadFanVaultVideos;
+loadFanVaultMerchandise();
+
+
+
+/* ================= FAN VAULT REEL AUTO PLAY ================= */
+
+function setupFanVaultReelAutoplay() {
+    const container = document.querySelector("#fan-vault-screen .reels-container");
+
+    if (!container) return;
+
+    const videos = container.querySelectorAll(".reel-video");
+
+    if (!videos.length) return;
+
+    const observer = new IntersectionObserver(
+        entries => {
+            entries.forEach(entry => {
+                const video = entry.target;
+
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.7) {
+                    videos.forEach(otherVideo => {
+                        if (otherVideo !== video) {
+                            otherVideo.pause();
+                        }
+                    });
+
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            });
+        },
+        {
+            root: container,
+            threshold: [0.7]
+        }
+    );
+
+    videos.forEach(video => {
+        observer.observe(video);
+    });
+}
+
+window.setupFanVaultReelAutoplay = setupFanVaultReelAutoplay;
+
+
+/* ================= FAN VAULT REEL TAP TO PLAY ================= */
+
+function setupFanVaultReelTap() {
+    const container = document.querySelector("#fan-vault-screen .reels-container");
+
+    if (!container) return;
+
+    const videos = container.querySelectorAll(".reel-video");
+
+    videos.forEach(video => {
+        video.addEventListener("click", event => {
+            if (event.target !== video) return;
+
+            if (video.paused) {
+                video.play().catch(() => {});
+            } else {
+                video.pause();
+            }
+        });
+    });
+}
+
+window.setupFanVaultReelTap = setupFanVaultReelTap;
+
+
+/* ================= FAN VAULT DOUBLE TAP LIKE ================= */
+
+function setupFanVaultDoubleTapLike() {
+    const container = document.querySelector("#fan-vault-screen .reels-container");
+
+    if (!container) return;
+
+    const videos = container.querySelectorAll(".reel-video");
+
+    videos.forEach(video => {
+        let lastTap = 0;
+
+        video.addEventListener("touchend", () => {
+            const now = Date.now();
+
+            if (now - lastTap < 300) {
+                const card = video.closest(".reel-card");
+                const likeButton = card?.querySelector(
+                    '.reel-engagement button[onclick^="toggleFunVaultLike"]'
+                );
+
+                if (likeButton) {
+                    likeButton.click();
+                }
+            }
+
+            lastTap = now;
+        });
+    });
+}
+
+window.setupFanVaultDoubleTapLike = setupFanVaultDoubleTapLike;
+
+
+/* ================= FAN VAULT SHARE ================= */
+
+async function shareFunVaultVideo(videoId) {
+    if (!videoId) return;
+
+    const shareUrl = `${window.location.origin}${window.location.pathname}?fun_vault=${encodeURIComponent(videoId)}`;
+
+    const shareData = {
+        title: "Eden Music — Fan Vault",
+        text: "Check out this exclusive Fan Vault video on Eden Music.",
+        url: shareUrl
+    };
+
+    try {
+        if (navigator.share) {
+            await navigator.share(shareData);
+            return;
+        }
+
+        await navigator.clipboard.writeText(shareUrl);
+        alert("Fan Vault video link copied!");
+    } catch (error) {
+        if (error?.name !== "AbortError") {
+            console.error("Share error:", error);
+        }
+    }
+}
+
+window.shareFunVaultVideo = shareFunVaultVideo;
+
+
+/* ================= FAN VAULT MERCHANDISE ================= */
+
+async function loadFanVaultMerchandise() {
+    const container = document.getElementById("fan-vault-merch-grid");
+
+    if (!container) return;
+
+    const { data: merch, error } = await supabase
+        .from("merchandise")
+        .select("id, name, description, price, currency, image_url, stock, is_preorder")
+        .eq("is_available", true)
+
+    if (error) {
+        console.error("Load merchandise error:", error);
+        container.innerHTML = `
+            <p class="dashboard-empty">
+                Merchandise is currently unavailable.
+            </p>
+        `;
+        return;
+    }
+
+    if (!merch?.length) {
+        container.innerHTML = `
+            <p class="dashboard-empty">
+                No merchandise available yet.
+            </p>
+        `;
+        return;
+    }
+
+    container.innerHTML = merch.map(item => `
+        <article class="fan-vault-merch-card">
+
+            <div class="fan-vault-merch-image">
+                ${
+                    item.image_url
+                    ? `<img src="${item.image_url}" alt="${item.name}">`
+                    : `<span>🛍️</span>`
+                }
+            </div>
+
+            <div class="fan-vault-merch-info">
+                <h4>${item.name}</h4>
+
+                <p>${item.description || ""}</p>
+
+                <strong>
+                    ${item.currency} ${Number(item.price).toLocaleString()}
+                </strong>
+
+                ${
+                    item.is_preorder
+                    ? `<span class="fan-vault-preorder-badge">PRE-ORDER</span>`
+                    : ""
+                }
+
+                <button
+                    type="button"
+                    class="primary-btn"
+                    onclick="startMerchPreorder('${item.id}')"
+                >
+                    ${item.is_preorder ? "Pre-order" : "Buy Now"}
+                </button>
+            </div>
+
+        </article>
+    `).join("");
+}
+
+
+async function startMerchPreorder(merchId) {
+    if (!merchId) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        openFanAccountScreen();
+        return;
+    }
+
+    const { data: item, error } = await supabase
+        .from("merchandise")
+        .select("id, name, price, currency, stock")
+        .eq("id", merchId)
+        .single();
+
+    if (error || !item) {
+        console.error("Load merch item error:", error);
+        showMessage("Could not load this merchandise item.");
+        return;
+    }
+
+    let panel = document.getElementById("merch-checkout-panel");
+
+    if (!panel) {
+        panel = document.createElement("div");
+        panel.id = "merch-checkout-panel";
+        document.body.appendChild(panel);
+    }
+
+    panel.innerHTML = `
+        <div class="merch-checkout-overlay" onclick="closeMerchCheckout()"></div>
+        <div class="merch-checkout-sheet">
+            <div class="merch-checkout-header">
+                <div>
+                    <span class="eyebrow">EDEN MUSIC</span>
+                    <h3>Pre-order</h3>
+                </div>
+                <button type="button" onclick="closeMerchCheckout()">✕</button>
+            </div>
+
+            <div class="merch-checkout-product">
+                <h4>${item.name}</h4>
+                <p>${item.currency} ${Number(item.price).toLocaleString()} each</p>
+            </div>
+
+            <form id="merch-checkout-form">
+                <label>Quantity
+                    <input id="merch-quantity" type="number" min="1" value="1" required>
+                </label>
+
+                <label>Full name
+                    <input id="merch-customer-name" type="text" required>
+                </label>
+
+                <label>Phone number
+                    <input id="merch-phone" type="tel" required>
+                </label>
+
+                <label>Delivery address
+                    <textarea id="merch-address" rows="3" required></textarea>
+                </label>
+
+                <div class="merch-payment-methods">
+                    <strong>Payment method</strong>
+                    <label class="merch-payment-option">
+                        <input type="radio" name="merch-payment-method" value="mpesa" required>
+                        <span>📱 M-Pesa</span>
+                    </label>
+                    <label class="merch-payment-option">
+                        <input type="radio" name="merch-payment-method" value="airtel_money">
+                        <span>📱 Airtel Money</span>
+                    </label>
+                    <label class="merch-payment-option">
+                        <input type="radio" name="merch-payment-method" value="card">
+                        <span>💳 Card</span>
+                    </label>
+                </div>
+
+                <div class="merch-checkout-total">
+                    <span>Total</span>
+                    <strong id="merch-checkout-total">${item.currency} ${Number(item.price).toLocaleString()}</strong>
+                </div>
+
+                <button type="submit" class="primary-btn">
+                    Continue to Payment
+                </button>
+            </form>
+        </div>
+    `;
+
+    panel.classList.add("active");
+
+    document.getElementById("merch-checkout-form").addEventListener("submit", async event => {
+        event.preventDefault();
+
+        const quantity = Number(document.getElementById("merch-quantity").value);
+        const customerName = document.getElementById("merch-customer-name").value.trim();
+        const phone = document.getElementById("merch-phone").value.trim();
+        const deliveryAddress = document.getElementById("merch-address").value.trim();
+        const paymentMethod = document.querySelector('input[name="merch-payment-method"]:checked')?.value;
+
+        if (!quantity || !customerName || !phone || !deliveryAddress || !paymentMethod) {
+            showMessage("Please complete all fields.");
+            return;
+        }
+
+        const totalAmount = Number(item.price) * quantity;
+
+        const { data: order, error: orderError } = await supabase
+            .from("merch_orders")
+            .insert({
+                user_id: user.id,
+                merchandise_id: item.id,
+                quantity,
+                customer_name: customerName,
+                phone,
+                delivery_address: deliveryAddress,
+                total_amount: totalAmount,
+                currency: item.currency,
+                payment_status: "pending",
+                payment_method: paymentMethod,
+                order_status: "pending"
+            })
+            .select("id")
+            .single();
+
+        if (orderError) {
+            console.error("Create merch order error:", orderError);
+            showMessage("Could not create your order.");
+            return;
+        }
+        const paymentReference = `EDEN-${order.id}`;
+
+        const { error: referenceError } = await supabase
+            .from("merch_orders")
+            .update({ payment_reference: paymentReference })
+            .eq("id", order.id);
+
+        if (referenceError) {
+            console.error("Save payment reference error:", referenceError);
+            showMessage("Could not prepare payment.");
+            return;
+        }
+
+        const paymentResponse = await supabase.functions.invoke("create-payment", {
+            body: {
+                email: user.email,
+                amount: Math.round(totalAmount * 100),
+                reference: paymentReference,
+                callback_url: `${window.location.origin}/`
+            }
+        });
+
+        if (paymentResponse.error || !paymentResponse.data?.status || !paymentResponse.data?.data?.authorization_url) {
+            console.error("Paystack initialization error:", paymentResponse.error || paymentResponse.data);
+            showMessage("Could not start payment. Your order remains pending.");
+            return;
+        }
+
+        console.log("Paystack payment initialized:", paymentResponse.data.data.reference);
+        window.location.href = paymentResponse.data.data.authorization_url;
+    });
+}
+
+async function verifyMerchPayment(reference) {
+    try {
+        const { data, error } = await supabase.functions.invoke("verify-payment", {
+            body: { reference }
+        });
+
+        if (error) {
+            console.error("Payment verification request failed:", error);
+            showMessage("Payment verification failed. Please check your order status.");
+            return false;
+        }
+
+        if (!data?.success || data?.data?.status !== "success") {
+            console.error("Payment verification failed:", data);
+            showMessage("Payment could not be verified.");
+            return false;
+        }
+
+        console.log("Payment verified successfully:", reference);
+        return true;
+    } catch (error) {
+        console.error("Payment verification error:", error);
+        showMessage("Payment verification failed. Please try again.");
+        return false;
+    }
+}
+
+function closeMerchCheckout() {
+    const panel = document.getElementById("merch-checkout-panel");
+    if (panel) panel.classList.remove("active");
+}
+
+function showMerchOrderConfirmation(order, item, quantity, paymentMethod, totalAmount) {
+    let panel = document.getElementById("merch-order-confirmation");
+
+    if (!panel) {
+        panel = document.createElement("div");
+        panel.id = "merch-order-confirmation";
+        document.body.appendChild(panel);
+    }
+
+    panel.innerHTML = `
+        <div class="merch-confirmation-overlay"></div>
+        <div class="merch-confirmation-sheet">
+            <div class="merch-confirmation-icon">✓</div>
+            <span class="eyebrow">EDEN MUSIC</span>
+            <h3>Pre-order received</h3>
+            <p>Your merchandise order has been created successfully.</p>
+
+            <div class="merch-confirmation-details">
+                <div><span>Order ID</span><strong>${order.id}</strong></div>
+                <div><span>Item</span><strong>${item.name}</strong></div>
+                <div><span>Quantity</span><strong>${quantity}</strong></div>
+                <div><span>Payment</span><strong>${paymentMethod}</strong></div>
+                <div><span>Total</span><strong>${item.currency} ${totalAmount.toLocaleString()}</strong></div>
+                <div><span>Status</span><strong>Pending payment</strong></div>
+            </div>
+
+            <button type="button" class="primary-btn" onclick="closeMerchOrderConfirmation()">
+                Continue
+            </button>
+        </div>
+    `;
+
+    panel.classList.add("active");
+}
+
+function closeMerchOrderConfirmation() {
+    const panel = document.getElementById("merch-order-confirmation");
+    if (panel) panel.classList.remove("active");
+}
+
+window.closeMerchOrderConfirmation = closeMerchOrderConfirmation;
+
+window.closeMerchCheckout = closeMerchCheckout;
+window.loadFanVaultMerchandise = loadFanVaultMerchandise;
+window.loadFanVaultMerchandise = loadFanVaultMerchandise;
+window.loadFanVaultMerchandise = loadFanVaultMerchandise;
+window.loadFanVaultMerchandise = loadFanVaultMerchandise;
+window.loadFanVaultMerchandise = loadFanVaultMerchandise;
+window.startMerchPreorder = startMerchPreorder;
+
+
+/* ================= STAGE 4 — MERCHANDISE MANAGEMENT ================= */
+
+async function loadDeveloperMerchandise() {
+    const container = document.getElementById("developer-merch-list");
+    if (!container) return;
+
+    const { data: merch, error } = await supabase
+        .from("merchandise")
+        .select("id, name, description, price, currency, image_url, stock, is_preorder, is_available")
+
+    if (error) {
+        console.error("Load dashboard merchandise error:", error);
+        container.innerHTML = `<p class="dashboard-empty">Could not load merchandise.</p>`;
+        return;
+    }
+
+    if (!merch?.length) {
+        container.innerHTML = `<p class="dashboard-empty">No merchandise created yet.</p>`;
+        return;
+    }
+
+    container.innerHTML = merch.map(item => `
+        <article class="developer-release-card">
+            <div>
+                <span class="eyebrow">${item.is_available ? "AVAILABLE" : "HIDDEN"}</span>
+                <h4>${item.name}</h4>
+                <p>${item.description || ""}</p>
+                <small>${item.currency} ${Number(item.price).toLocaleString()} • Stock: ${item.stock ?? 0}</small>
+            </div>
+
+            <div class="live-control-actions">
+                <button type="button" class="secondary-btn" onclick="editMerchandise('${item.id}')">
+                    ✏️ Edit
+                </button>
+
+                <button type="button" class="secondary-btn" onclick="deleteMerchandise('${item.id}')">
+                    🗑️ Delete
+                </button>
+            </div>
+        </article>
+    `).join("");
+}
+
+async function createMerchandise() {
+    const name = document.getElementById("merch-name")?.value.trim();
+    const description = document.getElementById("merch-description")?.value.trim();
+    const price = Number(document.getElementById("merch-price")?.value);
+    const currency = document.getElementById("merch-currency")?.value.trim() || "KES";
+    const imageFile = document.getElementById("merch-image-file")?.files[0];
+    const stock = Number(document.getElementById("merch-stock")?.value || 0);
+    const isPreorder = document.getElementById("merch-is-preorder")?.checked || false;
+    const isAvailable = document.getElementById("merch-is-available")?.checked ?? true;
+    const message = document.getElementById("merch-save-message");
+
+    if (!name || Number.isNaN(price) || !imageFile) {
+        if (message) message.textContent = "Name, price, and image are required.";
+        return;
+    }
+
+    const safeName = imageFile.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+    const imagePath = "merchandise/" + Date.now() + "_" + safeName;
+
+    const { error: imageUploadError } = await supabase
+        .storage
+        .from("song")
+        .upload(imagePath, imageFile, {
+            cacheControl: "3600",
+            upsert: false
+        });
+
+    if (imageUploadError) {
+        console.error("Merchandise image upload error:", imageUploadError);
+        if (message) message.textContent = "Could not upload merchandise image.";
+        return;
+    }
+
+    const { data: imagePublicData } = supabase
+        .storage
+        .from("song")
+        .getPublicUrl(imagePath);
+
+    const imageUrl = imagePublicData.publicUrl;
+
+    const { error } = await supabase
+        .from("merchandise")
+        .insert({
+            name,
+            description: description || null,
+            price,
+            currency,
+            image_url: imageUrl || null,
+            stock,
+            is_preorder: isPreorder,
+            is_available: isAvailable
+        });
+
+    if (error) {
+        console.error("Create merchandise error:", error);
+        if (message) message.textContent = "Could not create merchandise.";
+        return;
+    }
+
+    if (message) message.textContent = "Merchandise added successfully.";
+
+    clearMerchandiseForm();
+
+    await loadDeveloperMerchandise();
+    await loadFanVaultMerchandise();
+}
+
+function clearMerchandiseForm() {
+    document.getElementById("merch-name").value = "";
+    document.getElementById("merch-description").value = "";
+    document.getElementById("merch-price").value = "";
+    document.getElementById("merch-currency").value = "KES";
+    document.getElementById("merch-image-url").value = "";
+    document.getElementById("merch-stock").value = "";
+    document.getElementById("merch-is-preorder").checked = false;
+    document.getElementById("merch-is-available").checked = true;
+}
+
+async function editMerchandise(merchId) {
+    const { data: item, error } = await supabase
+        .from("merchandise")
+        .select("id, name, description, price, currency, image_url, stock, is_preorder, is_available")
+        .eq("id", merchId)
+        .single();
+
+    if (error || !item) {
+        showMessage("Could not load merchandise.");
+        return;
+    }
+
+    document.getElementById("merch-name").value = item.name || "";
+    document.getElementById("merch-description").value = item.description || "";
+    document.getElementById("merch-price").value = item.price ?? "";
+    document.getElementById("merch-currency").value = item.currency || "KES";
+    document.getElementById("merch-image-url").value = item.image_url || "";
+    document.getElementById("merch-stock").value = item.stock ?? 0;
+    document.getElementById("merch-is-preorder").checked = !!item.is_preorder;
+    document.getElementById("merch-is-available").checked = !!item.is_available;
+
+    const button = document.querySelector(
+        '#developer-merch-controls button[onclick="createMerchandise()"]'
+    );
+
+    if (button) {
+        button.textContent = "💾 Update Merchandise";
+        button.onclick = () => updateMerchandise(merchId);
+    }
+
+    document.getElementById("developer-merch-controls")
+        ?.scrollIntoView({ behavior: "smooth" });
+}
+
+async function updateMerchandise(merchId) {
+    const name = document.getElementById("merch-name")?.value.trim();
+    const description = document.getElementById("merch-description")?.value.trim();
+    const price = Number(document.getElementById("merch-price")?.value);
+    const currency = document.getElementById("merch-currency")?.value.trim() || "KES";
+    const imageFile = document.getElementById("merch-image-file")?.files[0];
+    const stock = Number(document.getElementById("merch-stock")?.value || 0);
+    const isPreorder = document.getElementById("merch-is-preorder")?.checked || false;
+    const isAvailable = document.getElementById("merch-is-available")?.checked ?? true;
+    const message = document.getElementById("merch-save-message");
+
+    if (!name || Number.isNaN(price) || !imageFile) {
+        if (message) message.textContent = "Name, price, and image are required.";
+        return;
+    }
+
+    const { error } = await supabase
+        .from("merchandise")
+        .update({
+            name,
+            description: description || null,
+            price,
+            currency,
+            image_url: imageUrl || null,
+            stock,
+            is_preorder: isPreorder,
+            is_available: isAvailable
+        })
+        .eq("id", merchId);
+
+    if (error) {
+        console.error("Update merchandise error:", error);
+        if (message) message.textContent = "Could not update merchandise.";
+        return;
+    }
+
+    if (message) message.textContent = "Merchandise updated successfully.";
+
+    clearMerchandiseForm();
+
+    const button = document.querySelector("#developer-merch-controls button");
+
+    if (button) {
+        button.textContent = "🛍️ Add Merchandise";
+        button.onclick = createMerchandise;
+    }
+
+    await loadDeveloperMerchandise();
+    await loadFanVaultMerchandise();
+}
+
+async function deleteMerchandise(merchId) {
+    if (!merchId) return;
+
+    const { error } = await supabase
+        .from("merchandise")
+        .delete()
+        .eq("id", merchId);
+
+    if (error) {
+        console.error("Delete merchandise error:", error);
+        showMessage("Could not delete merchandise.");
+        return;
+    }
+
+    showMessage("Merchandise deleted.");
+
+    await loadDeveloperMerchandise();
+    await loadFanVaultMerchandise();
+}
+
+window.loadDeveloperMerchandise = loadDeveloperMerchandise;
+window.createMerchandise = createMerchandise;
+window.editMerchandise = editMerchandise;
+window.updateMerchandise = updateMerchandise;
+window.deleteMerchandise = deleteMerchandise;
+
+loadDeveloperMerchandise();
+
+/* ================= STAGE 4 — LINKED ACCOUNT CONTENT ================= */
+
+async function loadLinkedAccountContent() {
+    const container = document.getElementById("linked-content-list");
+    const status = document.getElementById("linked-content-status");
+
+    if (!container) return;
+
+    if (status) status.textContent = "Checking for new content...";
+
+    const { data, error } = await supabase
+        .from("linked_account_content")
+        .select("*")
+
+    if (error) {
+        console.error("Linked content load error:", error);
+        if (status) status.textContent = "Could not load linked content.";
+        return;
+    }
+
+    if (!data?.length) {
+        if (status) status.textContent = "No new linked content.";
+        container.innerHTML =
+            '<p class="dashboard-empty">No new linked content yet.</p>';
+        return;
+    }
+
+    if (status) status.textContent = `${data.length} linked video(s) found.`;
+
+    container.innerHTML = data.map(item => `
+        <article class="developer-release-card">
+            <div>
+                <span class="eyebrow">${item.platform.toUpperCase()} • ${item.status.toUpperCase()}</span>
+                <h4>${item.title || "Untitled video"}</h4>
+                <p>${item.description || ""}</p>
+            </div>
+            <div class="live-control-actions">
+                <button type="button" class="secondary-btn" onclick="approveLinkedContent('${item.id}')">✅ Approve</button>
+                <button type="button" class="secondary-btn" onclick="rejectLinkedContent('${item.id}')">❌ Reject</button>
+            </div>
+        </article>
+    `).join("");
+}
+
+async function rejectLinkedContent(contentId) {
+    if (!contentId) return;
+
+    const { error } = await supabase
+        .from("linked_account_content")
+        .update({ status: "rejected" })
+        .eq("id", contentId);
+
+    if (error) {
+        console.error("Reject linked content error:", error);
+        showMessage("Could not reject video.");
+        return;
+    }
+
+    showMessage("Video rejected.");
+    await loadLinkedAccountContent();
+}
+
+window.rejectLinkedContent = rejectLinkedContent;
+
+async function approveLinkedContent(contentId) {
+    if (!contentId) return;
+
+    const destination = document.getElementById("linked-content-destination")?.value || "home";
+
+    const { error } = await supabase
+        .from("linked_account_content")
+        .update({
+            status: "approved",
+            destination,
+            reviewed_at: new Date().toISOString()
+        })
+        .eq("id", contentId);
+
+    if (error) {
+        console.error("Approve linked content error:", error);
+        showMessage("Could not approve video.");
+        return;
+    }
+
+    showMessage(`Video approved for ${destination.replace("_", " ")}.`);
+    await loadLinkedAccountContent();
+}
+
+window.approveLinkedContent = approveLinkedContent;
+
+
+async function checkLinkedAccountContent() {
+    await loadLinkedAccountContent();
+}
+
+window.loadLinkedAccountContent = loadLinkedAccountContent;
+window.checkLinkedAccountContent = checkLinkedAccountContent;
+
+loadLinkedAccountContent();
+
+
+let appLiveStream = null;
+
+async function startAppLivePreview() {
+    const video = document.getElementById("app-live-preview");
+    const message = document.getElementById("app-live-preview-message");
+
+    if (!video) return;
+
+    try {
+        appLiveStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true
+        });
+
+        video.srcObject = appLiveStream;
+
+        if (message) {
+            message.textContent = "Camera and microphone are ready.";
+        }
+
+    } catch (error) {
+        console.error("EDEN LIVE CAMERA ERROR:", error);
+
+        if (message) {
+            message.textContent =
+                "Camera/microphone access was denied or is unavailable.";
+        }
+    }
+}
+
+function stopAppLivePreview() {
+    const video = document.getElementById("app-live-preview");
+
+    if (appLiveStream) {
+        appLiveStream.getTracks().forEach(track => track.stop());
+        appLiveStream = null;
+    }
+
+    if (video) {
+        video.srcObject = null;
+    }
+
+    const message = document.getElementById("app-live-preview-message");
+
+    if (message) {
+        message.textContent = "Camera and microphone stopped.";
+    }
+}
+
+window.startAppLivePreview = startAppLivePreview;
+window.stopAppLivePreview = stopAppLivePreview;
+
+
+async function startFanVaultLiveEvent() {
+    const title = document.getElementById("fan-vault-live-title")?.value.trim();
+    const description = document.getElementById("fan-vault-live-description-input")?.value.trim();
+    const message = document.getElementById("fan-vault-live-save-message");
+
+    const roomId = "eden-" + Date.now();
+
+    if (message) {
+        message.textContent = "Starting live camera...";
+    }
+
+    const liveState = await launchEdenLive(roomId);
+
+    if (!liveState) {
+        if (message) {
+            message.textContent = "Unable to start the live broadcast.";
+        }
+        return;
+    }
+
+    liveState.title = title || "Eden Music Live";
+    liveState.description = description || "";
+
+    edenLiveState = liveState;
+
+    await publishEdenLivePresence();
+
+    if (message) {
+        message.textContent = "🔴 Eden Music is LIVE.";
+    }
+
+    console.log("EDEN LIVE PUBLISHED:", edenLiveState);
+}
+
+function stopFanVaultLiveEvent() {
+    stopAppLivePreview();
+
+    const message = document.getElementById("fan-vault-live-save-message");
+
+    if (message) {
+        message.textContent = "Live camera stopped.";
+    }
+
+    console.log("EDEN LIVE STOPPED");
+}
+
+window.startFanVaultLiveEvent = startFanVaultLiveEvent;
+window.stopFanVaultLiveEvent = stopFanVaultLiveEvent;
+
+
+let edenLiveState = {
+    active: false,
+    title: "",
+    description: "",
+    startedAt: null
+};
+
+function getEdenLiveState() {
+    return edenLiveState;
+}
+
+window.getEdenLiveState = getEdenLiveState;
+
+
+async function publishEdenLiveState() {
+    if (!appLiveStream) return;
+
+    const title =
+        document.getElementById("fan-vault-live-title")?.value.trim() ||
+        "Eden Music Live";
+
+    const description =
+        document.getElementById("fan-vault-live-description-input")?.value.trim() ||
+        "";
+
+    edenLiveState = {
+        active: true,
+        title,
+        description,
+        startedAt: new Date().toISOString()
+    };
+
+    console.log("EDEN LIVE STATE PUBLISHED:", edenLiveState);
+
+    return edenLiveState;
+}
+
+window.publishEdenLiveState = publishEdenLiveState;
+
+
+let edenLivePeerConnection = null;
+
+function createEdenLivePeerConnection() {
+    if (edenLivePeerConnection) {
+        edenLivePeerConnection.close();
+    }
+
+    edenLivePeerConnection = new RTCPeerConnection({
+        iceServers: [
+            {
+                urls: "stun:stun.l.google.com:19302"
+            }
+        ]
+    });
+
+    if (appLiveStream) {
+        appLiveStream.getTracks().forEach(track => {
+            edenLivePeerConnection.addTrack(track, appLiveStream);
+        });
+    }
+
+    edenLivePeerConnection.onicecandidate = event => {
+        if (event.candidate) {
+            console.log("EDEN LIVE ICE CANDIDATE:", event.candidate);
+        }
+    };
+
+    edenLivePeerConnection.onconnectionstatechange = () => {
+        console.log(
+            "EDEN LIVE CONNECTION STATE:",
+            edenLivePeerConnection.connectionState
+        );
+    };
+
+    console.log("EDEN LIVE PEER CONNECTION READY");
+
+    return edenLivePeerConnection;
+}
+
+window.createEdenLivePeerConnection = createEdenLivePeerConnection;
+window.getEdenLivePeerConnection = () => edenLivePeerConnection;
+
+async function createEdenLiveOffer() {
+    if (!edenLivePeerConnection) {
+        createEdenLivePeerConnection();
+    }
+
+    const offer = await edenLivePeerConnection.createOffer();
+    await edenLivePeerConnection.setLocalDescription(offer);
+
+    console.log("EDEN LIVE OFFER CREATED:", offer);
+
+    return offer;
+}
+
+window.createEdenLiveOffer = createEdenLiveOffer;
+
+async function sendEdenLiveSignal(roomId, messageType, payload) {
+    const { data, error } = await supabase
+        .from("live_signaling")
+        .insert({
+            room_id: roomId,
+            message_type: messageType,
+            payload
+        })
+        .select()
+        .single();
+
+    if (error) {
+        console.error("EDEN LIVE SIGNAL ERROR:", error);
+        return null;
+    }
+
+    console.log("EDEN LIVE SIGNAL SENT:", data);
+    return data;
+}
+
+window.sendEdenLiveSignal = sendEdenLiveSignal;
+
+let edenLiveRoomId = null;
+let edenLiveSignalingChannel = null;
+
+async function startEdenLiveSignaling(roomId) {
+    edenLiveRoomId = roomId;
+
+    if (edenLiveSignalingChannel) {
+        await supabase.removeChannel(edenLiveSignalingChannel);
+    }
+
+    edenLiveSignalingChannel = supabase
+        .channel("eden-live-" + roomId + "-" + Date.now())
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "live_signaling",
+                filter: `room_id=eq.${roomId}`
+            },
+            payload => {
+                console.log("EDEN LIVE SIGNAL RECEIVED:", payload.new);
+            }
+        )
+        .subscribe(status => {
+            console.log("EDEN LIVE SIGNALING STATUS:", status);
+        });
+
+    return edenLiveSignalingChannel;
+}
+
+window.startEdenLiveSignaling = startEdenLiveSignaling;
+
+async function launchEdenLive(roomId) {
+    if (!appLiveStream) {
+        await startAppLivePreview();
+    }
+
+    if (!appLiveStream) {
+        console.error("EDEN LIVE: Camera/microphone unavailable.");
+        return null;
+    }
+
+    createEdenLivePeerConnection();
+
+    await startEdenLiveSignaling(roomId);
+    await connectEdenLiveIceSignaling(edenLivePeerConnection, roomId);
+    await connectEdenLiveBroadcasterIce(roomId);
+
+    await listenForEdenLiveAnswer(roomId);
+
+    const offer = await createEdenLiveOffer();
+
+    await sendEdenLiveSignal(
+        roomId,
+        "offer",
+        {
+            type: offer.type,
+            sdp: offer.sdp
+        }
+    );
+
+    startEdenLiveAnswerWatcher(roomId);
+
+
+    window.edenLiveCurrentRoomId = roomId;
+    window.edenLiveIsArtist = true;
+    document.body.classList.add("eden-live-artist");
+    document.body.classList.remove("eden-live-fan");
+
+    subscribeEdenLiveComments(roomId);
+
+    edenLiveState = {
+        ...edenLiveState,
+        active: true,
+        roomId,
+        startedAt: new Date().toISOString()
+    };
+
+    document.body.classList.add("eden-live-active");
+
+    setEdenLiveFullscreen(true);
+
+    console.log("EDEN LIVE BROADCAST STARTED:", edenLiveState);
+
+    return edenLiveState;
+}
+
+window.launchEdenLive = launchEdenLive;
+
+async function joinEdenLive(roomId, videoElementId = "fan-vault-live-video") {
+    window.edenLiveIsArtist = false;
+    document.body.classList.add("eden-live-fan");
+    document.body.classList.remove("eden-live-artist");
+    const video = document.getElementById(videoElementId);
+
+    if (!video) {
+        console.error("EDEN LIVE: Fan video element not found.");
+        return null;
+    }
+
+    video.style.display = "block";
+
+    const peerConnection = new RTCPeerConnection({
+        iceServers: [
+            {
+                urls: "stun:stun.l.google.com:19302"
+            }
+        ]
+    });
+
+    await connectEdenLiveIceSignaling(peerConnection, roomId);
+    peerConnection.ontrack = event => {
+        if (event.streams && event.streams[0]) {
+            video.srcObject = event.streams[0];
+            video.style.display = "block";
+            const placeholder = document.querySelector("#fan-vault-live-player .fan-vault-live-placeholder");
+            if (placeholder) placeholder.style.display = "none";
+            video.onloadedmetadata = () => {
+                video.play().catch(error => {
+                    console.error("EDEN FAN LIVE PLAY ERROR:", error);
+                });
+            };
+        }
+    };
+
+    const channel = supabase
+        .channel("eden-live-" + roomId + "-" + Date.now())
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "live_signaling",
+                filter: `room_id=eq.${roomId}`
+            },
+            async payload => {
+                const signal = payload.new;
+
+                console.log("EDEN FAN SIGNAL:", signal);
+
+                if (signal.message_type === "live-ended") {
+                    console.log("EDEN FAN LIVE ENDED BY ARTIST");
+                    await exitEdenLive();
+                    return;
+                }
+
+                if (signal.message_type === "offer") {
+                    await peerConnection.setRemoteDescription(
+                        new RTCSessionDescription(signal.payload)
+                    );
+
+                    const answer = await peerConnection.createAnswer();
+
+                    await peerConnection.setLocalDescription(answer);
+
+                    await sendEdenLiveSignal(
+                        roomId,
+                        "answer",
+                        {
+                            type: answer.type,
+                            sdp: answer.sdp
+                        }
+                    );
+                }
+            }
+        )
+        .subscribe(status => {
+            console.log("EDEN FAN LIVE STATUS:", status);
+        });
+
+    await processExistingEdenLiveOffer(roomId, peerConnection);
+    document.body.classList.add("eden-live-active");
+
+    window.edenFanLivePeerConnection = peerConnection;
+    window.edenFanLiveSignalingChannel = channel;
+
+    return peerConnection;
+}
+
+window.joinEdenLive = joinEdenLive;
+
+async function sendEdenLiveIceCandidate(roomId, candidate) {
+    return await sendEdenLiveSignal(
+        roomId,
+        "ice-candidate",
+        {
+            candidate: candidate.candidate,
+            sdpMid: candidate.sdpMid,
+            sdpMLineIndex: candidate.sdpMLineIndex
+        }
+    );
+}
+
+function setupEdenLiveIceSignaling(peerConnection, roomId) {
+    peerConnection.onicecandidate = async event => {
+        if (!event.candidate) return;
+
+        console.log("EDEN LIVE ICE CANDIDATE:", event.candidate);
+
+        await sendEdenLiveIceCandidate(
+            roomId,
+            event.candidate
+        );
+    };
+}
+
+window.sendEdenLiveIceCandidate = sendEdenLiveIceCandidate;
+window.setupEdenLiveIceSignaling = setupEdenLiveIceSignaling;
+
+async function connectEdenLiveIceSignaling(peerConnection, roomId) {
+    setupEdenLiveIceSignaling(peerConnection, roomId);
+
+    const channel = supabase
+        .channel(`eden-live-ice-${roomId}-${Date.now()}`)
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "live_signaling",
+                filter: `room_id=eq.${roomId}`
+            },
+            async payload => {
+                const signal = payload.new;
+
+                if (
+                    signal.message_type === "ice-candidate" &&
+                    signal.payload
+                ) {
+                    try {
+                        await peerConnection.addIceCandidate(
+                            new RTCIceCandidate(signal.payload)
+                        );
+
+                        console.log(
+                            "EDEN LIVE ICE CANDIDATE ADDED"
+                        );
+                    } catch (error) {
+                        console.error(
+                            "EDEN LIVE ICE ERROR:",
+                            error
+                        );
+                    }
+                }
+            }
+        )
+        .subscribe(status => {
+            console.log(
+                "EDEN LIVE ICE SIGNALING STATUS:",
+                status
+            );
+        });
+
+    window.edenFanLiveIceChannel = channel;
+
+    return channel;
+}
+
+window.connectEdenLiveIceSignaling =
+    connectEdenLiveIceSignaling;
+
+async function listenForEdenLiveAnswer(roomId) {
+    const channel = supabase
+        .channel(`eden-live-answer-${roomId}`)
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "live_signaling",
+                filter: `room_id=eq.${roomId}`
+            },
+            async payload => {
+                const signal = payload.new;
+
+                if (
+                    signal.message_type === "answer" &&
+                    edenLivePeerConnection
+                ) {
+                    try {
+                        await edenLivePeerConnection.setRemoteDescription(
+                            new RTCSessionDescription(signal.payload)
+                        );
+
+                        console.log(
+                            "EDEN LIVE ANSWER APPLIED"
+                        );
+                    } catch (error) {
+                        console.error(
+                            "EDEN LIVE ANSWER ERROR:",
+                            error
+                        );
+                    }
+                }
+            }
+        )
+        .subscribe(status => {
+            console.log(
+                "EDEN LIVE ANSWER STATUS:",
+                status
+            );
+        });
+
+    window.edenLiveAnswerChannel = channel;
+
+    return channel;
+}
+
+window.listenForEdenLiveAnswer = listenForEdenLiveAnswer;
+
+async function getExistingEdenLiveOffer(roomId) {
+    const { data, error } = await supabase
+        .from("live_signaling")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("message_type", "offer")
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error(
+            "EDEN LIVE OFFER LOOKUP ERROR:",
+            error
+        );
+        return null;
+    }
+
+    return data;
+}
+
+window.getExistingEdenLiveOffer = getExistingEdenLiveOffer;
+
+async function processExistingEdenLiveOffer(roomId, peerConnection) {
+    const offerRow = await getExistingEdenLiveOffer(roomId);
+
+    if (!offerRow || !offerRow.payload) {
+        console.log("EDEN LIVE: No existing offer found.");
+        return false;
+    }
+
+    try {
+        await peerConnection.setRemoteDescription(
+            new RTCSessionDescription(offerRow.payload)
+        );
+
+        const answer = await peerConnection.createAnswer();
+
+        await peerConnection.setLocalDescription(answer);
+
+        await sendEdenLiveSignal(
+            roomId,
+            "answer",
+            {
+                type: answer.type,
+                sdp: answer.sdp
+            }
+        );
+
+        console.log(
+            "EDEN LIVE: Existing offer processed."
+        );
+
+        return true;
+    } catch (error) {
+        console.error(
+            "EDEN LIVE EXISTING OFFER ERROR:",
+            error
+        );
+
+        return false;
+    }
+}
+
+window.processExistingEdenLiveOffer =
+    processExistingEdenLiveOffer;
+
+async function connectEdenLiveBroadcasterIce(roomId) {
+    const channel = supabase
+        .channel(`eden-live-broadcaster-ice-${roomId}`)
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "live_signaling",
+                filter: `room_id=eq.${roomId}`
+            },
+            async payload => {
+                const signal = payload.new;
+
+                if (
+                    signal.message_type === "ice-candidate" &&
+                    edenLivePeerConnection &&
+                    signal.payload
+                ) {
+                    try {
+                        await edenLivePeerConnection.addIceCandidate(
+                            new RTCIceCandidate(signal.payload)
+                        );
+
+                        console.log(
+                            "EDEN BROADCASTER ICE CANDIDATE ADDED"
+                        );
+                    } catch (error) {
+                        console.error(
+                            "EDEN BROADCASTER ICE ERROR:",
+                            error
+                        );
+                    }
+                }
+            }
+        )
+        .subscribe(status => {
+            console.log(
+                "EDEN BROADCASTER ICE STATUS:",
+                status
+            );
+        });
+
+    window.edenLiveBroadcasterIceChannel = channel;
+
+    return channel;
+}
+
+window.connectEdenLiveBroadcasterIce =
+    connectEdenLiveBroadcasterIce;
+
+async function getActiveEdenLiveRoom() {
+    const { data, error } = await supabase
+        .from("live_signaling")
+        .select("room_id, created_at")
+        .eq("message_type", "offer")
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error("EDEN LIVE ACTIVE ROOM ERROR:", error);
+        return null;
+    }
+
+    if (!data?.room_id) {
+        console.log("EDEN LIVE: No active live room found.");
+        return null;
+    }
+
+    console.log("EDEN LIVE ACTIVE ROOM:", data.room_id);
+
+    return data.room_id;
+}
+
+window.getActiveEdenLiveRoom = getActiveEdenLiveRoom;
+
+async function autoJoinEdenLive() {
+    const roomId = await getActiveEdenLiveRoom();
+
+    if (!roomId) return null;
+
+    console.log("EDEN LIVE: Joining active room:", roomId);
+
+    const result = await joinEdenLive(roomId);
+    showEdenFanLiveVideo();
+    return result;
+}
+
+window.autoJoinEdenLive = autoJoinEdenLive;
+
+async function joinCurrentEdenLive() {
+    await refreshEdenFanLivePresence();
+    const button = document.getElementById("fan-vault-join-button");
+    const roomId = edenLiveState?.roomId;
+
+    if (!roomId) {
+        console.warn("EDEN LIVE: No active live room.");
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Joining Live...";
+    }
+
+    try {
+        await joinEdenLive(roomId);
+
+        if (button) {
+            button.textContent = "🔴 Live";
+        }
+
+        setEdenLiveFullscreen(true);
+
+    window.edenLiveCurrentRoomId = roomId;
+
+    await loadEdenLiveComments(roomId);
+    subscribeEdenLiveComments(roomId);
+
+    console.log("EDEN LIVE: Fan joined live room.");
+    } catch (error) {
+        console.error("EDEN LIVE JOIN ERROR:", error);
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "🔴 Join Live";
+        }
+    }
+}
+
+window.joinCurrentEdenLive = joinCurrentEdenLive;
+
+function updateEdenFanLiveStatus() {
+    const badge = document.getElementById("fan-vault-live-badge");
+    const button = document.getElementById("fan-vault-join-button");
+    const description = document.getElementById("fan-vault-live-description");
+
+    if (!badge) return;
+
+    if (edenLiveState?.active && edenLiveState?.roomId) {
+        badge.textContent = "🔴 LIVE";
+        badge.classList.add("active");
+
+        if (description) {
+            description.textContent =
+                edenLiveState.description || "Eden is live right now.";
+        }
+
+        if (button) {
+            button.style.display = "inline-flex";
+            button.disabled = false;
+            button.textContent = "🔴 Join Live";
+        }
+    } else {
+        badge.textContent = "OFFLINE";
+        badge.classList.remove("active");
+
+        if (description) {
+            description.textContent = "No live event right now.";
+        }
+
+        if (button) {
+            button.style.display = "none";
+        }
+    }
+}
+
+window.updateEdenFanLiveStatus = updateEdenFanLiveStatus;
+
+setInterval(() => {
+    updateEdenFanLiveStatus();
+}, 3000);
+
+updateEdenFanLiveStatus();
+
+async function publishEdenLivePresence() {
+    if (!edenLiveState?.active || !edenLiveState?.roomId) {
+        return null;
+    }
+
+    const { data, error } = await supabase
+        .from("live_signaling")
+        .insert({
+            room_id: edenLiveState.roomId,
+            message_type: "live-presence",
+            payload: {
+                active: true,
+                title: edenLiveState.title || "Eden Music Live",
+                description: edenLiveState.description || "",
+                startedAt: edenLiveState.startedAt
+            }
+        })
+        .select()
+        .single();
+
+    if (error) {
+        console.error("EDEN LIVE PRESENCE ERROR:", error);
+        return null;
+    }
+
+    console.log("EDEN LIVE PRESENCE PUBLISHED:", data);
+    return data;
+}
+
+window.publishEdenLivePresence = publishEdenLivePresence;
+
+async function getEdenLivePresence() {
+    const { data, error } = await supabase
+        .from("live_signaling")
+        .select("room_id, payload, created_at")
+        .eq("message_type", "live-presence")
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error("EDEN LIVE PRESENCE LOOKUP ERROR:", error);
+        return null;
+    }
+
+    if (!data?.room_id || !data?.payload?.active) {
+        return null;
+    }
+
+    return {
+        roomId: data.room_id,
+        ...data.payload
+    };
+}
+
+window.getEdenLivePresence = getEdenLivePresence;
+
+async function refreshEdenFanLivePresence() {
+    const presence = await getEdenLivePresence();
+
+    if (!presence) {
+        edenLiveState = {
+            ...edenLiveState,
+            active: false,
+            roomId: null
+        };
+
+        updateEdenFanLiveStatus();
+        return;
+    }
+
+    edenLiveState = {
+        ...edenLiveState,
+        active: true,
+        roomId: presence.roomId,
+        title: presence.title || "Eden Music Live",
+        description: presence.description || "",
+        startedAt: presence.startedAt || null
+    };
+
+    updateEdenFanLiveStatus();
+}
+
+window.refreshEdenFanLivePresence =
+    refreshEdenFanLivePresence;
+
+setInterval(() => {
+    refreshEdenFanLivePresence().catch(error => {
+        console.error("EDEN LIVE PRESENCE REFRESH ERROR:", error);
+    });
+}, 5000);
+
+refreshEdenFanLivePresence().catch(error => {
+    console.error("EDEN LIVE INITIAL PRESENCE ERROR:", error);
+});
+
+function showEdenFanLiveVideo() {
+    const video = document.getElementById("fan-vault-live-video");
+    const placeholder = document.querySelector(
+        "#fan-vault-live-player .fan-vault-live-placeholder"
+    );
+
+    if (video) {
+        video.style.display = "block";
+    }
+
+    if (placeholder) {
+        placeholder.style.display = "none";
+    }
+}
+
+window.showEdenFanLiveVideo = showEdenFanLiveVideo;
+
+async function loadFanVaultUpcomingEvents() {
+    console.log("EDEN FAN VAULT: Loading upcoming events...");
+
+    const container = document.getElementById("fan-vault-upcoming-events");
+
+    if (!container) {
+        return;
+    }
+
+    container.innerHTML = `
+        <p class="dashboard-empty">
+            No upcoming live events.
+        </p>
+    `;
+}
+
+window.loadFanVaultUpcomingEvents = loadFanVaultUpcomingEvents;
+
+
+async function getExistingEdenLiveAnswer(roomId) {
+    const { data, error } = await supabase
+        .from("live_signaling")
+        .select("*")
+        .eq("room_id", roomId)
+        .eq("message_type", "answer")
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error(
+            "EDEN LIVE ANSWER LOOKUP ERROR:",
+            error
+        );
+        return null;
+    }
+
+    return data;
+}
+
+async function processExistingEdenLiveAnswer(roomId) {
+    const answerRow = await getExistingEdenLiveAnswer(roomId);
+
+    if (
+        !answerRow ||
+        !answerRow.payload ||
+        !edenLivePeerConnection
+    ) {
+        console.log("EDEN LIVE: No existing answer found.");
+        return false;
+    }
+
+    if (
+        edenLivePeerConnection.signalingState !==
+        "have-local-offer"
+    ) {
+        console.log(
+            "EDEN LIVE: Peer is not waiting for an answer."
+        );
+        return false;
+    }
+
+    try {
+        await edenLivePeerConnection.setRemoteDescription(
+            new RTCSessionDescription(answerRow.payload)
+        );
+
+        console.log(
+            "EDEN LIVE: Existing answer applied."
+        );
+
+        await processExistingEdenLiveIceCandidates(roomId);
+
+        return true;
+    } catch (error) {
+        console.error(
+            "EDEN LIVE EXISTING ANSWER ERROR:",
+            error
+        );
+
+        return false;
+    }
+}
+
+window.getExistingEdenLiveAnswer =
+    getExistingEdenLiveAnswer;
+
+window.processExistingEdenLiveAnswer =
+    processExistingEdenLiveAnswer;
+
+async function waitForEdenLiveAnswer(roomId, attempts = 10) {
+    for (let i = 0; i < attempts; i++) {
+        const applied = await processExistingEdenLiveAnswer(roomId);
+
+        if (applied) {
+            console.log("EDEN LIVE: Answer received by polling.");
+            return true;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    console.log("EDEN LIVE: Answer polling timed out.");
+    return false;
+}
+
+window.waitForEdenLiveAnswer = waitForEdenLiveAnswer;
+
+function startEdenLiveAnswerWatcher(roomId) {
+    if (window.edenLiveAnswerWatcher) {
+        clearInterval(window.edenLiveAnswerWatcher);
+    }
+
+    window.edenLiveAnswerWatcher = setInterval(async () => {
+        if (
+            edenLivePeerConnection &&
+            edenLivePeerConnection.signalingState === "have-local-offer"
+        ) {
+            await processExistingEdenLiveAnswer(roomId);
+        }
+    }, 1000);
+
+    console.log("EDEN LIVE: Answer watcher started.");
+}
+
+window.startEdenLiveAnswerWatcher = startEdenLiveAnswerWatcher;
+
+async function processExistingEdenLiveIceCandidates(roomId) {
+    if (!edenLivePeerConnection) {
+        return;
+    }
+
+    if (!edenLivePeerConnection.remoteDescription) {
+        console.log("EDEN LIVE: Remote description not ready for ICE.");
+        return;
+    }
+
+    const { data, error } = await supabase
+        .from("live_signaling")
+        .select("payload")
+        .eq("room_id", roomId)
+        .eq("message_type", "ice-candidate")
+        .order("created_at", { ascending: true });
+
+    if (error) {
+        console.error(
+            "EDEN LIVE EXISTING ICE LOOKUP ERROR:",
+            error
+        );
+        return;
+    }
+
+    if (!data?.length) {
+        console.log("EDEN LIVE: No existing ICE candidates found.");
+        return;
+    }
+
+    for (const row of data) {
+        if (!row?.payload) {
+            continue;
+        }
+
+        try {
+            await edenLivePeerConnection.addIceCandidate(
+                new RTCIceCandidate(row.payload)
+            );
+
+            console.log(
+                "EDEN LIVE: Existing ICE candidate added."
+            );
+        } catch (error) {
+            console.warn(
+                "EDEN LIVE EXISTING ICE CANDIDATE SKIPPED:",
+                error
+            );
+        }
+    }
+}
+
+window.processExistingEdenLiveIceCandidates =
+    processExistingEdenLiveIceCandidates;
+
+function setEdenLiveFullscreen(enabled) {
+    const player = document.getElementById("fan-vault-live-player");
+
+    if (!player) {
+        return;
+    }
+
+    player.classList.toggle(
+        "eden-live-fullscreen",
+        Boolean(enabled)
+    );
+
+    document.body.classList.toggle(
+        "eden-live-body",
+        Boolean(enabled)
+    );
+}
+
+window.setEdenLiveFullscreen = setEdenLiveFullscreen;
+
+/* ================= EDEN LIVE COMMENTS ================= */
+
+let edenLiveCommentsChannel = null;
+
+async function loadEdenLiveComments(roomId) {
+    if (!roomId) return;
+
+    const { data, error } = await supabase
+        .from("live_comments")
+        .select("*")
+        .eq("room_id", roomId)
+        .order("created_at", { ascending: true });
+
+    if (error) {
+        console.error("EDEN LIVE COMMENTS LOAD ERROR:", error);
+        return;
+    }
+
+    const container = document.getElementById("eden-live-comments");
+
+    if (container) {
+        container.innerHTML = "";
+    }
+
+    (data || []).forEach(comment => {
+        renderEdenLiveComment(comment);
+    });
+}
+
+async function subscribeEdenLiveComments(roomId) {
+    if (!roomId) return;
+
+    if (edenLiveCommentsChannel) {
+        await supabase.removeChannel(edenLiveCommentsChannel);
+        edenLiveCommentsChannel = null;
+    }
+
+    edenLiveCommentsChannel = supabase
+        .channel(`eden-live-comments-${roomId}`)
+        .on(
+            "postgres_changes",
+            {
+                event: "INSERT",
+                schema: "public",
+                table: "live_comments",
+                filter: `room_id=eq.${roomId}`
+            },
+            payload => {
+                console.log(
+                    "EDEN LIVE COMMENT:",
+                    payload.new
+                );
+
+                renderEdenLiveComment(payload.new);
+            }
+        )
+        .subscribe(status => {
+            console.log(
+                "EDEN LIVE COMMENTS STATUS:",
+                status
+            );
+        });
+
+    window.edenLiveCommentsChannel =
+        edenLiveCommentsChannel;
+}
+
+window.loadEdenLiveComments = loadEdenLiveComments;
+window.subscribeEdenLiveComments =
+    subscribeEdenLiveComments;
+
+async function sendEdenLiveComment(event) {
+    event.preventDefault();
+
+    const input = document.getElementById(
+        "eden-live-comment-input"
+    );
+
+    const text = input?.value.trim();
+
+    if (!text) return;
+
+    const roomId =
+        window.edenLiveCurrentRoomId ||
+        window.edenLiveState?.roomId;
+
+    if (!roomId) {
+        console.error("EDEN LIVE COMMENT: No room ID.");
+        return;
+    }
+
+    const {
+        data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+        console.error(
+            "EDEN LIVE COMMENT: User not authenticated."
+        );
+        return;
+    }
+
+    const displayName =
+        user.user_metadata?.display_name ||
+        user.user_metadata?.full_name ||
+        user.email?.split("@")[0] ||
+        "Fan";
+
+    const { data, error } = await supabase
+        .from("live_comments")
+        .insert({
+            room_id: roomId,
+            user_id: user.id,
+            display_name: displayName,
+            comment_text: text
+        })
+        .select()
+        .single();
+
+    if (error) {
+        console.error(
+            "EDEN LIVE COMMENT SEND ERROR:",
+            error
+        );
+        return;
+    }
+
+    input.value = "";
+
+    renderEdenLiveComment(data);
+}
+
+function renderEdenLiveComment(comment) {
+    const container = document.getElementById("eden-live-comments");
+
+    if (!container || !comment) return;
+
+    const item = document.createElement("div");
+    item.className = "eden-live-comment" + (comment.parent_id ? " reply" : "");
+    item.dataset.commentId = comment.id;
+
+    const name = document.createElement("strong");
+    name.textContent = comment.display_name || "User";
+
+    const text = document.createElement("span");
+    text.textContent = comment.comment_text || "";
+
+    item.appendChild(name);
+    item.appendChild(text);
+
+    if (!comment.parent_id && window.edenLiveIsArtist) {
+        const actions = document.createElement("div");
+        actions.className = "eden-live-comment-actions";
+
+        const replyButton = document.createElement("button");
+        replyButton.type = "button";
+        replyButton.className = "eden-live-reply-btn";
+        replyButton.textContent = "Reply";
+        replyButton.onclick = () => {
+            const reply = prompt("Reply to this comment:");
+            if (reply) {
+                replyToEdenLiveComment(comment.id, reply);
+            }
+        };
+
+        actions.appendChild(replyButton);
+        item.appendChild(actions);
+    }
+
+    container.appendChild(item);
+    container.scrollTop = container.scrollHeight;
+}
+
+window.sendEdenLiveComment =
+    sendEdenLiveComment;
+
+window.renderEdenLiveComment =
+    renderEdenLiveComment;
+
+async function replyToEdenLiveComment(parentId, text) {
+    if (!parentId || !text?.trim()) return;
+
+    const roomId =
+        window.edenLiveCurrentRoomId ||
+        window.edenLiveState?.roomId;
+
+    if (!roomId) return;
+
+    const {
+        data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const displayName =
+        user.user_metadata?.display_name ||
+        user.user_metadata?.full_name ||
+        user.email?.split("@")[0] ||
+        "Eden";
+
+    const { data, error } = await supabase
+        .from("live_comments")
+        .insert({
+            room_id: roomId,
+            user_id: user.id,
+            parent_id: parentId,
+            display_name: displayName,
+            comment_text: text.trim()
+        })
+        .select()
+        .single();
+
+    if (error) {
+        console.error(
+            "EDEN LIVE REPLY ERROR:",
+            error
+        );
+        return;
+    }
+
+    renderEdenLiveComment(data);
+}
+
+window.replyToEdenLiveComment =
+    replyToEdenLiveComment;
+
+async function endEdenLive() {
+    if (!window.edenLiveIsArtist) return;
+
+    const roomId =
+        window.edenLiveCurrentRoomId ||
+        edenLiveState?.roomId;
+
+    if (!roomId) return;
+
+    const confirmed = confirm(
+        "End this live session for everyone?"
+    );
+
+    if (!confirmed) return;
+
+    edenLiveState = {
+        ...edenLiveState,
+        active: false,
+        roomId: null
+    };
+
+    await supabase
+        .from("live_signaling")
+        .insert({
+            room_id: roomId,
+            message_type: "live-ended",
+            payload: {
+                endedAt: new Date().toISOString()
+            }
+        });
+
+    if (edenLivePeerConnection) {
+        edenLivePeerConnection.close();
+    }
+
+    if (window.edenLiveAnswerChannel) {
+        await supabase.removeChannel(
+            window.edenLiveAnswerChannel
+        );
+    }
+
+    if (window.edenLiveBroadcasterIceChannel) {
+        await supabase.removeChannel(
+            window.edenLiveBroadcasterIceChannel
+        );
+    }
+
+    if (edenLiveCommentsChannel) {
+        await supabase.removeChannel(edenLiveCommentsChannel);
+        edenLiveCommentsChannel = null;
+    }
+
+    setEdenLiveFullscreen(false);
+
+    document.body.classList.remove(
+        "eden-live-active"
+    );
+
+    document.body.classList.remove(
+        "eden-live-artist",
+        "eden-live-fan"
+    );
+
+    window.edenLiveCurrentRoomId = null;
+    edenLiveRoomId = null;
+    window.edenLiveIsArtist = false;
+    edenLiveState = {
+        ...edenLiveState,
+        active: false,
+        roomId: null
+    };
+
+    console.log("EDEN LIVE ENDED");
+}
+
+async function exitEdenLive() {
+    window.edenLiveIsArtist = false;
+    const peerConnection =
+        window.edenFanLivePeerConnection;
+
+    if (peerConnection) {
+        peerConnection.close();
+    }
+
+    if (window.edenFanLiveSignalingChannel) {
+        await supabase.removeChannel(
+            window.edenFanLiveSignalingChannel
+        );
+    }
+
+    if (window.edenFanLiveIceChannel) {
+        await supabase.removeChannel(
+            window.edenFanLiveIceChannel
+        );
+    }
+
+    const video = document.getElementById(
+        "fan-vault-live-video"
+    );
+
+    if (video) {
+        video.pause();
+        video.srcObject = null;
+        video.style.display = "none";
+    }
+
+    document.body.classList.remove(
+        "eden-live-active"
+    );
+
+    document.body.classList.remove(
+        "eden-live-artist",
+        "eden-live-fan"
+    );
+
+    if (edenLiveCommentsChannel) {
+        await supabase.removeChannel(edenLiveCommentsChannel);
+        edenLiveCommentsChannel = null;
+    }
+
+    
+    setEdenLiveFullscreen(false);
+
+    window.edenFanLivePeerConnection = null;
+    window.edenFanLiveSignalingChannel = null;
+    window.edenFanLiveIceChannel = null;
+    window.edenLiveCurrentRoomId = null;
+    edenLiveRoomId = null;
+    edenLiveState = {
+        ...edenLiveState,
+        active: false,
+        roomId: null
+    };
+
+    console.log("EDEN FAN EXITED LIVE");
+}
+
+window.endEdenLive = endEdenLive;
+window.exitEdenLive = exitEdenLive;
+
+async function updateFanVaultEntryButton() {
+    const button = document.querySelector(
+        '#fan-vault-entry-label'
+    );
+
+    if (!button) return;
+
+    const {
+        data: { session }
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+        button.textContent = "Enter Vault";
+        return;
+    }
+
+    const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+    if (profile?.role === "fan") {
+        button.textContent = "Enter Vault";
+    } else {
+        button.textContent = "Fan Vault";
+    }
+}
+
+window.updateFanVaultEntryButton =
+    updateFanVaultEntryButton;
+
+supabase.auth.onAuthStateChange(() => {
+    setTimeout(
+        updateFanVaultEntryButton,
+        0
+    );
+});
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+        updateFanVaultEntryButton();
+    }
+);
+
+async function loadHomeUpcomingShows() {
+    const container =
+        document.getElementById("home-upcoming-shows");
+
+    if (!container) return;
+
+    const { data, error } = await supabase
+        .from("live_events")
+        .select("*")
+        .gte("scheduled_at", new Date().toISOString())
+        .order("scheduled_at", { ascending: true })
+        .limit(3);
+
+    if (error) {
+        console.error(
+            "EDEN HOME UPCOMING SHOWS ERROR:",
+            error
+        );
+
+        container.innerHTML =
+            '<p class="dashboard-empty">Unable to load upcoming shows.</p>';
+
+        return;
+    }
+
+    if (!data?.length) {
+        container.innerHTML =
+            '<p class="dashboard-empty">No upcoming shows yet.</p>';
+
+        return;
+    }
+
+    container.innerHTML = data.map(event => {
+        const date = new Date(event.scheduled_at);
+
+        return `
+            <div class="concert-card">
+                <div class="concert-date">
+                    <strong>${date.getDate()}</strong>
+                    <span>${date.toLocaleString("en-US", {
+                        month: "short"
+                    }).toUpperCase()}</span>
+                </div>
+
+                <div class="concert-info">
+                    <span>Upcoming Event</span>
+                    <h3>${event.title || "Eden Live Event"}</h3>
+                    <p>${event.description || "Eden Music Live"} • ${
+                        date.toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                        })
+                    }</p>
+                </div>
+
+                <div class="concert-status">
+                    Coming soon
+                </div>
+            </div>
+        `;
+    }).join("");
+}
+
+window.loadHomeUpcomingShows =
+    loadHomeUpcomingShows;
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+        loadHomeUpcomingShows();
+    }
+);
+
+function openFanVaultUpcomingEvents() {
+    const section =
+        document.getElementById(
+            "fan-vault-upcoming-events"
+        );
+
+    if (!section) {
+        console.error(
+            "EDEN UPCOMING EVENTS: Section not found."
+        );
+        return;
+    }
+
+    closeProfileScreen();
+    closeFanAccountScreen();
+
+    const fanVaultScreen =
+        document.getElementById("fan-vault-screen");
+
+    if (fanVaultScreen) {
+        fanVaultScreen.classList.add("active");
+        fanVaultScreen.style.display = "block";
+    }
+
+    section.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+    });
+
+    loadFanVaultUpcomingEvents();
+}
+
+window.openFanVaultUpcomingEvents =
+    openFanVaultUpcomingEvents;
+
+
+async function loadHomeEdenUpdates() {
+    const container =
+        document.getElementById("home-eden-updates");
+
+    if (!container) return;
+
+    const { data, error } = await supabase
+        .from("song")
+        .select("id, title, artist")
+        .limit(3);
+
+    if (error) {
+        console.error(
+            "EDEN HOME UPDATES ERROR:",
+            error
+        );
+
+        container.innerHTML = `
+            <div class="update-icon">✨</div>
+            <div>
+                <span class="eyebrow">EDEN UPDATES</span>
+                <h3>Stay connected</h3>
+                <p>Updates are temporarily unavailable.</p>
+            </div>
+        `;
+
+        return;
+    }
+
+    if (!data?.length) {
+        container.innerHTML = `
+            <div class="update-icon">✨</div>
+            <div>
+                <span class="eyebrow">EDEN UPDATES</span>
+                <h3>Stay connected</h3>
+                <p>New music and Eden Music updates will appear here.</p>
+            </div>
+        `;
+
+        return;
+    }
+
+    const latest = data[0];
+
+    container.innerHTML = `
+        <div class="update-icon">✨</div>
+        <div>
+            <span class="eyebrow">EDEN UPDATES</span>
+            <h3>New release: ${latest.title}</h3>
+            <p>
+                ${latest.artist || "Eden"} has new music available.
+            </p>
+        </div>
+    `;
+}
+
+window.loadHomeEdenUpdates =
+    loadHomeEdenUpdates;
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+        loadHomeEdenUpdates();
+    }
+);
+
+async function restoreDeveloperDashboard() {
+    const loginPanel = document.getElementById("developer-login");
+    const header = document.getElementById("developer-dashboard-header");
+    const controls = document.getElementById("developer-controls");
+
+    if (!loginPanel || !header || !controls) {
+        return false;
+    }
+
+    const {
+        data: { session }
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+        loginPanel.style.display = "block";
+        header.style.display = "none";
+        controls.style.display = "none";
+        return false;
+    }
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("role, display_name")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+    if (error || !profile || profile.role !== "developer") {
+        loginPanel.style.display = "block";
+        header.style.display = "none";
+        controls.style.display = "none";
+        return false;
+    }
+
+    developerUserId = session.user.id;
+
+    loginPanel.style.display = "none";
+    header.style.display = "block";
+    controls.style.display = "flex";
+
+    await loadDeveloperProfile();
+    await loadFunVaultVideos();
+    await loadDeveloperReleases();
+
+    return true;
+}
+
+window.restoreDeveloperDashboard = restoreDeveloperDashboard;
+async function openNotifications() {
+    const screen = document.getElementById("notifications-screen");
+    const list = document.getElementById("notifications-list");
+
+    if (!screen) return;
+
+    document.querySelectorAll(".profile-screen").forEach(section => {
+        section.classList.remove("active");
+        section.style.display = "none";
+    });
+
+    screen.classList.add("active");
+    screen.style.display = "block";
+
+    if (list) {
+        await loadNotifications();
+    }
+
+    await updateNotificationAccountLabel();
+
+    window.scrollTo(0, 0);
+}
+
+function closeNotifications() {
+    const screen = document.getElementById("notifications-screen");
+
+    if (screen) {
+        screen.classList.remove("active");
+        screen.style.display = "none";
+    }
+
+    const home = document.getElementById("home-screen");
+
+    if (home) {
+        home.classList.add("active");
+        home.style.display = "block";
+    }
+
+    window.scrollTo(0, 0);
+}
+
+window.openNotifications = openNotifications;
+window.closeNotifications = closeNotifications;
+
+
+async function loadNotifications() {
+    const list = document.getElementById("notifications-list");
+
+    if (!list) return;
+
+    list.innerHTML =
+        '<p class="dashboard-empty">Loading notifications...</p>';
+
+    const [
+        { data: songs, error: songsError },
+        { data: events, error: eventsError },
+        { data: videos, error: videosError }
+    ] = await Promise.all([
+        supabase
+            .from("song")
+            .select("*")
+            .order("title", { ascending: true }),
+
+        supabase
+            .from("live_events")
+            .select("*")
+            .gte("scheduled_at", new Date().toISOString())
+            .order("scheduled_at", { ascending: true })
+            .limit(10),
+
+        supabase
+            .from("fun_vault_videos")
+            .select("*")
+            .limit(10)
+    ]);
+
+    if (songsError || eventsError || videosError) {
+        console.error(
+            "Notifications error:",
+            songsError || eventsError || videosError
+        );
+
+        list.innerHTML =
+            '<p class="dashboard-empty">Unable to load notifications.</p>';
+
+        return;
+    }
+
+    const notifications = [];
+
+    (songs || []).forEach(song => {
+        notifications.push({
+            type: "NEW MUSIC",
+            songId: song.id,
+            title: song.title || "New Eden Music release",
+            description: `${song.artist || "Eden"} has new music available.`,
+            date: null
+        });
+    });
+
+    (events || []).forEach(event => {
+        notifications.push({
+            type: "LIVE EVENT",
+            eventId: event.id,
+            title: event.title || "Upcoming Eden live event",
+            description:
+                event.description ||
+                "Eden has an upcoming live event.",
+            date: event.scheduled_at
+        });
+    });
+
+    (videos || []).forEach(video => {
+        notifications.push({
+            type: "FUN VAULT",
+            videoId: video.id,
+            title: video.title || "New Fun Vault video",
+            description:
+                video.description ||
+                "A new exclusive video is available in the Fun Vault.",
+            date: video.created_at
+        });
+    });
+
+    if (!notifications.length) {
+        list.innerHTML = `
+            <div class="profile-section">
+                <span class="eyebrow">NOTIFICATIONS</span>
+                <h3>No new notifications</h3>
+                <p>You're all caught up.</p>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = notifications.map(notification => {
+        const dateText = notification.date
+            ? new Date(notification.date).toLocaleString()
+            : "";
+
+        const notificationId =
+            notification.songId ||
+            notification.eventId ||
+            notification.videoId ||
+            "";
+
+        return `
+            <div class="profile-section notification-card"
+                 onclick="openNotificationTarget('${notification.type}', '${notificationId}')">
+                <span class="eyebrow">${notification.type}</span>
+                <h3>${notification.title}</h3>
+                <p>${notification.description}</p>
+                ${dateText ? `<small>${dateText}</small>` : ""}
+            </div>
+        `;
+    }).join("");
+
+}
+
+
+async function updateNotificationAccountLabel() {
+    const label = document.getElementById("notifications-account-label");
+
+    if (!label) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+        label.textContent = "Guest";
+        return;
+    }
+
+    const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name, role")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+    if (!profile) {
+        label.textContent = session.user.email || "Account";
+        return;
+    }
+
+    if (profile.role === "fan") {
+        label.textContent =
+            `Signed in as ${profile.display_name || "Fan"}`;
+        return;
+    }
+
+    if (profile.role === "developer") {
+        label.textContent =
+            `Artist account • ${profile.display_name || "Eden"}`;
+        return;
+    }
+
+    label.textContent =
+        `Signed in as ${profile.display_name || "Account"}`;
+}
+
+async function openNotificationTarget(type, id) {
+    if (!type || !id) return;
+
+    if (type === "NEW MUSIC") {
+        openMusicScreen();
+        requestAnimationFrame(() => playSong(id));
+        return;
+    }
+
+    if (type === "LIVE EVENT") {
+        closeNotifications();
+        openFanVault();
+        return;
+    }
+
+    if (type === "FUN VAULT") {
+        closeNotifications();
+        await openFanVault();
+
+        requestAnimationFrame(() => {
+            const target = document.getElementById(`fun-vault-video-`);
+            if (target) {
+                target.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+        });
+
+        return;
+    }
+}
+
+window.openNotificationTarget = openNotificationTarget;
+
+function openHomeScreen() {
+    document.querySelectorAll(".profile-screen").forEach(screen => {
+        screen.classList.remove("active");
+        screen.style.display = "none";
+    });
+
+    const musicScreen = document.getElementById("music-screen");
+    if (musicScreen) {
+        musicScreen.classList.remove("active");
+    }
+
+    document.body.classList.remove("music-open");
+
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+}
+
+window.openHomeScreen = openHomeScreen;
+
+
+/* ================= GLOBAL BOTTOM NAVIGATION ================= */
+
+function closeAllAppScreens() {
+    document.querySelectorAll(".profile-screen").forEach(screen => {
+        screen.classList.remove("active");
+        screen.style.display = "none";
+    });
+
+    const musicScreen = document.getElementById("music-screen");
+
+    if (musicScreen) {
+        musicScreen.classList.remove("active");
+        musicScreen.style.display = "";
+    }
+
+    document.body.classList.remove("music-open");
+}
+
+function setActiveBottomNav(tab) {
+    document.querySelectorAll(".bottom-nav .nav-item").forEach(button => {
+        button.classList.remove("active");
+    });
+
+    const buttons = document.querySelectorAll(".bottom-nav .nav-item");
+
+    const indexMap = {
+        home: 0,
+        music: 1,
+        vault: 2,
+        profile: 3
+    };
+
+    const index = indexMap[tab];
+
+    if (index !== undefined && buttons[index]) {
+        buttons[index].classList.add("active");
+    }
+}
+
+function navigateHome() {
+    closeAllAppScreens();
+    setActiveBottomNav("home");
+
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+}
+
+function navigateMusic() {
+    closeAllAppScreens();
+    setActiveBottomNav("music");
+
+    openMusicScreen();
+}
+
+function navigateVault() {
+    closeAllAppScreens();
+    setActiveBottomNav("vault");
+
+    openFanAccountScreen();
+}
+
+function navigateProfile() {
+    closeAllAppScreens();
+    setActiveBottomNav("profile");
+
+    const profileScreen = document.getElementById("profile-screen");
+    if (profileScreen) {
+        profileScreen.style.display = "block";
+    }
+
+    openProfileScreen();
+}
+
+window.closeAllAppScreens = closeAllAppScreens;
+window.setActiveBottomNav = setActiveBottomNav;
+window.navigateHome = navigateHome;
+window.navigateMusic = navigateMusic;
+window.navigateVault = navigateVault;
+window.navigateProfile = navigateProfile;
+
+/* ================= HOME REEL TIKTOK VIEWER ================= */
+
+function openTikTokReel(video) {
+    window.currentTikTokReelVideo = video;
+
+    const viewer = document.getElementById("tiktok-reel-viewer");
+    const viewerVideo = document.getElementById("tiktok-reel-video");
+    viewer.classList.remove("tiktok-reel-changing");
+    void viewer.offsetWidth;
+    const title = document.getElementById("tiktok-reel-title");
+    const description = document.getElementById("tiktok-reel-description");
+    const card = video?.closest(".reel-card");
+    const likeButton = document.getElementById("tiktok-reel-like");
+    const commentButton = document.getElementById("tiktok-reel-comment");
+    const shareButton = document.getElementById("tiktok-reel-share");
+    const videoId = card?.id?.replace(/^fun-vault-video-/, "");
+
+    if (!viewer || !viewerVideo || !video) return;
+
+    if (likeButton && videoId) {
+        likeButton.onclick = () => toggleFunVaultLike(videoId);
+    }
+
+    if (commentButton && videoId) {
+        commentButton.onclick = () => showFunVaultComments(videoId);
+    }
+
+    if (shareButton && videoId) {
+        shareButton.onclick = () => shareFunVaultVideo(videoId);
+    }
+
+    viewer.classList.add("active");
+    viewer.classList.add("tiktok-reel-changing");
+
+    viewerVideo.src = video.src;
+    viewerVideo.currentTime = 0;
+    viewerVideo.muted = window.tiktokReelMuted || false;
+
+    if (tiktokMuteButton) {
+        tiktokMuteButton.textContent = viewerVideo.muted ? "🔇" : "🔊";
+    }
+
+    if (title) {
+        title.textContent = card?.querySelector(".reel-overlay h3")?.textContent || "";
+    }
+
+    if (description) {
+        description.textContent = card?.querySelector(".reel-overlay p")?.textContent || "";
+    }
+
+    viewerVideo.onended = () => {
+        const videos = Array.from(document.querySelectorAll("#public-reels-container .public-reel-video"));
+        const currentIndex = videos.indexOf(window.currentTikTokReelVideo);
+        const nextVideo = videos[currentIndex + 1];
+
+        if (nextVideo) {
+            openTikTokReel(nextVideo);
+        } else {
+            closeTikTokReel();
+        }
+    };
+
+    viewerVideo.play().catch(() => {});
+    document.body.style.overflow = "hidden";
+}
+
+function closeTikTokReel() {
+    const viewer = document.getElementById("tiktok-reel-viewer");
+    const video = document.getElementById("tiktok-reel-video");
+
+    if (video) {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        video.onended = null;
+    }
+
+    if (viewer) {
+        viewer.classList.remove("active");
+    }
+
+    window.currentTikTokReelVideo = null;
+    document.body.style.overflow = "";
+}
+
+function setupHomeTikTokReelViewer() {
+    const container = document.getElementById("public-reels-container");
+
+    if (!container || container.dataset.tiktokBound === "true") return;
+
+    container.dataset.tiktokBound = "true";
+
+    container.addEventListener("click", event => {
+        const video = event.target.closest(".public-reel-video");
+
+        if (!video) return;
+
+        event.preventDefault();
+        openTikTokReel(video);
+    });
+}
+
+const tiktokMuteButton = document.getElementById("tiktok-reel-mute");
+
+if (tiktokMuteButton) {
+    tiktokMuteButton.onclick = () => {
+        const video = document.getElementById("tiktok-reel-video");
+
+        if (!video) return;
+
+        video.muted = !video.muted;
+        window.tiktokReelMuted = video.muted;
+        tiktokMuteButton.textContent = video.muted ? "🔇" : "🔊";
+    };
+}
+
+window.openTikTokReel = openTikTokReel;
+window.closeTikTokReel = closeTikTokReel;
+window.setupHomeTikTokReelViewer = setupHomeTikTokReelViewer;
+
+/* ================= TIKTOK VIEWER DOUBLE-TAP LIKE ================= */
+
+const tiktokReelVideo = document.getElementById("tiktok-reel-video");
+
+if (tiktokReelVideo) {
+    let lastTikTokTap = 0;
+
+    tiktokReelVideo.addEventListener("touchend", () => {
+        const now = Date.now();
+
+        if (now - lastTikTokTap < 300) {
+            const likeButton = document.getElementById("tiktok-reel-like");
+
+            if (likeButton) likeButton.click();
+        }
+
+        lastTikTokTap = now;
+    });
+}
+
+/* ================= TIKTOK VIEWER SWIPE ================= */
+
+let tiktokTouchStartY = 0;
+let tiktokTouchEndY = 0;
+
+function setupTikTokSwipe() {
+    const viewer = document.getElementById("tiktok-reel-viewer");
+
+    if (!viewer || viewer.dataset.swipeBound === "true") return;
+
+    viewer.dataset.swipeBound = "true";
+
+    viewer.addEventListener("touchstart", event => {
+        tiktokTouchStartY = event.touches[0].clientY;
+    }, { passive: true });
+
+    viewer.addEventListener("touchend", event => {
+        tiktokTouchEndY = event.changedTouches[0].clientY;
+
+        const distance = tiktokTouchStartY - tiktokTouchEndY;
+
+        if (Math.abs(distance) < 80) return;
+
+        const videos = Array.from(
+            document.querySelectorAll("#public-reels-container .public-reel-video")
+        );
+
+        const currentIndex = videos.indexOf(window.currentTikTokReelVideo);
+
+        if (currentIndex === -1) return;
+
+        if (distance > 0) {
+            const nextVideo = videos[currentIndex + 1];
+            if (nextVideo) openTikTokReel(nextVideo);
+        } else {
+            const previousVideo = videos[currentIndex - 1];
+            if (previousVideo) openTikTokReel(previousVideo);
+        }
+    }, { passive: true });
+}
+
+window.setupTikTokSwipe = setupTikTokSwipe;
+setupTikTokSwipe();
+
+
+/* ================= TIKTOK VIEWER KEYBOARD CONTROLS ================= */
+
+document.addEventListener("keydown", event => {
+    const viewer = document.getElementById("tiktok-reel-viewer");
+    const video = document.getElementById("tiktok-reel-video");
+
+    if (!viewer?.classList.contains("active") || !video) return;
+
+    const videos = Array.from(
+        document.querySelectorAll("#public-reels-container .public-reel-video")
+    );
+
+    const currentVideo = window.currentTikTokReelVideo;
+    const currentIndex = videos.indexOf(currentVideo);
+
+    if (event.key === "Escape") {
+        closeTikTokReel();
+        return;
+    }
+
+    if (event.key === " ") {
+        event.preventDefault();
+
+        if (video.paused) {
+            video.play().catch(() => {});
+        } else {
+            video.pause();
+        }
+
+        return;
+    }
+
+    if (event.key === "ArrowDown") {
+        event.preventDefault();
+
+        const nextVideo = videos[currentIndex + 1];
+
+        if (nextVideo) {
+            openTikTokReel(nextVideo);
+        }
+
+        return;
+    }
+
+    if (event.key === "ArrowUp") {
+        event.preventDefault();
+
+        const previousVideo = videos[currentIndex - 1];
+
+        if (previousVideo) {
+            openTikTokReel(previousVideo);
+        }
+    }
+});
+
+
+/* ================= TIKTOK VIEWER TAP TO PLAY ================= */
+
+const tiktokTapVideo = document.getElementById("tiktok-reel-video");
+
+if (tiktokTapVideo) {
+    tiktokTapVideo.addEventListener("click", () => {
+        if (tiktokTapVideo.paused) {
+            tiktokTapVideo.play().catch(() => {});
+        } else {
+            tiktokTapVideo.pause();
+        }
+    });
+}
+
+
+async function checkEdenCloudStorage() {
+    const { data, error } = await supabase.storage.listBuckets();
+
+    if (error) {
+        console.error("EDEN CLOUD STORAGE ERROR:", error);
+        return false;
+    }
+
+    const appAssetsBucket = (data || []).find(
+        bucket => bucket.id === EDEN_APP_ASSETS.bucket
+    );
+
+    if (!appAssetsBucket) {
+        console.error(
+            "EDEN CLOUD STORAGE: app-assets bucket not found."
+        );
+        return false;
+    }
+
+    console.log(
+        "EDEN CLOUD STORAGE READY:",
+        EDEN_APP_ASSETS.bucket
+    );
+
+    console.log(
+        "EDEN CLOUD STORAGE TARGET:",
+        `${EDEN_APP_ASSETS.minimumCloudStorageGB} GB`
+    );
+
+    return true;
+}
+
+window.checkEdenCloudStorage = checkEdenCloudStorage;
+
+document.addEventListener("DOMContentLoaded", () => {
+    checkEdenCloudStorage();
+});
+
+function getEdenOnlineConfig() {
+    return {
+        onlineOnly: EDEN_APP_ASSETS.onlineOnly,
+        cloudStorageTargetGB:
+            EDEN_APP_ASSETS.minimumCloudStorageGB,
+        storageBucket:
+            EDEN_APP_ASSETS.bucket
+    };
+}
+
+window.getEdenOnlineConfig = getEdenOnlineConfig;
+
+function getEdenLauncherAssetPath(fileName) {
+    if (!fileName) return null;
+
+    return `${EDEN_APP_ASSETS.launcherIconFolder}/${fileName}`;
+}
+
+window.getEdenLauncherAssetPath = getEdenLauncherAssetPath;
+
+async function uploadEdenAppAsset(file) {
+    if (!file) return null;
+
+    const path = getEdenLauncherAssetPath(file.name);
+
+    const { data, error } = await supabase.storage
+        .from(EDEN_APP_ASSETS.bucket)
+        .upload(path, file, {
+            upsert: true,
+            cacheControl: "3600"
+        });
+
+    if (error) {
+        console.error("EDEN APP ASSET UPLOAD ERROR:", error);
+        return null;
+    }
+
+    console.log("EDEN APP ASSET UPLOADED:", data.path);
+
+    const { data: publicData } = supabase.storage
+        .from(EDEN_APP_ASSETS.bucket)
+        .getPublicUrl(data.path);
+
+    return publicData.publicUrl;
+}
+
+window.uploadEdenAppAsset = uploadEdenAppAsset;
+
+function getEdenAppAssetUrl(fileName) {
+    if (!fileName) return null;
+
+    const path = getEdenLauncherAssetPath(fileName);
+
+    const { data } = supabase.storage
+        .from(EDEN_APP_ASSETS.bucket)
+        .getPublicUrl(path);
+
+    return data?.publicUrl || null;
+}
+
+window.getEdenAppAssetUrl = getEdenAppAssetUrl;
+
+const EDEN_LAUNCHER_VERSION = "1.0.0";
+
+window.EDEN_LAUNCHER_VERSION = EDEN_LAUNCHER_VERSION;
+
+function getEdenLauncherConfig() {
+    return {
+        version: EDEN_LAUNCHER_VERSION,
+        bucket: EDEN_APP_ASSETS.bucket,
+        folder: EDEN_APP_ASSETS.launcherIconFolder
+    };
+}
+
+window.getEdenLauncherConfig = getEdenLauncherConfig;
+
+async function loadEdenAppConfig() {
+    const { data, error } = await supabase
+        .from("app_config")
+        .select("*")
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error("EDEN APP CONFIG ERROR:", error);
+        return null;
+    }
+
+    if (!data) {
+        console.warn("EDEN APP CONFIG: No configuration found.");
+        return null;
+    }
+
+    window.EDEN_REMOTE_APP_CONFIG = data;
+
+    console.log("EDEN APP CONFIG LOADED:", data);
+
+    return data;
+}
+
+window.loadEdenAppConfig = loadEdenAppConfig;
+
+document.addEventListener("DOMContentLoaded", () => {
+    loadEdenAppConfig();
+});
+
+function checkEdenLauncherUpdate() {
+    const remote = window.EDEN_REMOTE_APP_CONFIG;
+
+    if (!remote) return false;
+
+    const localVersion = EDEN_LAUNCHER_VERSION;
+    const remoteVersion = remote.launcher_version;
+
+    if (!remoteVersion || remoteVersion === localVersion) {
+        return false;
+    }
+
+    console.log(
+        "EDEN LAUNCHER UPDATE AVAILABLE:",
+        remoteVersion
+    );
+
+    return true;
+}
+
+window.checkEdenLauncherUpdate = checkEdenLauncherUpdate;
+
+function checkEdenCloudStorageRequirement() {
+    const remote = window.EDEN_REMOTE_APP_CONFIG;
+
+    if (!remote) return false;
+
+    const requiredGB = Number(
+        remote.minimum_cloud_storage_gb
+    );
+
+    const requirementMet =
+        requiredGB >= EDEN_APP_ASSETS.minimumCloudStorageGB;
+
+    console.log(
+        "EDEN CLOUD STORAGE REQUIREMENT:",
+        requirementMet
+    );
+
+    return requirementMet;
+}
+
+window.checkEdenCloudStorageRequirement =
+    checkEdenCloudStorageRequirement;
+
+async function updateEdenAppConfig(updates) {
+    if (!updates || typeof updates !== "object") {
+        return null;
+    }
+
+    const { data: current, error: readError } = await supabase
+        .from("app_config")
+        .select("id")
+        .order("id", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (readError || !current) {
+        console.error(
+            "EDEN APP CONFIG READ ERROR:",
+            readError
+        );
+        return null;
+    }
+
+    const { data, error } = await supabase
+        .from("app_config")
+        .update(updates)
+        .eq("id", current.id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error(
+            "EDEN APP CONFIG UPDATE ERROR:",
+            error
+        );
+        return null;
+    }
+
+    window.EDEN_REMOTE_APP_CONFIG = data;
+
+    console.log(
+        "EDEN APP CONFIG UPDATED:",
+        data
+    );
+
+    return data;
+}
+
+window.updateEdenAppConfig = updateEdenAppConfig;
+
+async function getEdenCloudStorageUsage() {
+    const { data, error } = await supabase
+        .from("storage.objects")
+        .select("bucket_id, metadata");
+
+    if (error) {
+        console.error(
+            "EDEN CLOUD STORAGE USAGE ERROR:",
+            error
+        );
+        return null;
+    }
+
+    let totalBytes = 0;
+
+    (data || []).forEach(file => {
+        const size = Number(file.metadata?.size || 0);
+
+        if (Number.isFinite(size)) {
+            totalBytes += size;
+        }
+    });
+
+    const totalGB =
+        totalBytes / (1024 * 1024 * 1024);
+
+    const result = {
+        totalBytes,
+        totalGB,
+        requiredGB: EDEN_APP_ASSETS.minimumCloudStorageGB
+    };
+
+    console.log(
+        "EDEN CLOUD STORAGE USAGE:",
+        result
+    );
+
+    return result;
+}
+
+window.getEdenCloudStorageUsage =
+    getEdenCloudStorageUsage;
+
+async function getEdenSystemStatus() {
+    const storageReady =
+        await checkEdenCloudStorage();
+
+    const storageUsage =
+        await getEdenCloudStorageUsage();
+
+    const onlineConfig =
+        getEdenOnlineConfig();
+
+    const remoteConfig =
+        window.EDEN_REMOTE_APP_CONFIG || null;
+
+    const status = {
+        online: navigator.onLine,
+        storageReady,
+        storageUsage,
+        onlineConfig,
+        remoteConfig
+    };
+
+    console.log(
+        "EDEN SYSTEM STATUS:",
+        status
+    );
+
+    return status;
+}
+
+window.getEdenSystemStatus = getEdenSystemStatus;
+
+function updateEdenOnlineState() {
+    const online = navigator.onLine;
+
+    document.body.classList.toggle(
+        "eden-online",
+        online
+    );
+
+    document.body.classList.toggle(
+        "eden-offline",
+        !online
+    );
+
+    window.edenIsOnline = online;
+
+    console.log(
+        "EDEN ONLINE STATE:",
+        online ? "ONLINE" : "OFFLINE"
+    );
+}
+
+window.updateEdenOnlineState =
+    updateEdenOnlineState;
+
+window.addEventListener(
+    "online",
+    updateEdenOnlineState
+);
+
+window.addEventListener(
+    "offline",
+    updateEdenOnlineState
+);
+
+updateEdenOnlineState();
+
+function updateEdenConnectionIndicator() {
+    let indicator =
+        document.getElementById("eden-connection-status");
+
+    if (!indicator) {
+        indicator = document.createElement("div");
+        indicator.id = "eden-connection-status";
+
+        document.body.appendChild(indicator);
+    }
+
+    if (navigator.onLine) {
+        indicator.textContent = "Online";
+        indicator.className = "eden-connection-online";
+    } else {
+        indicator.textContent = "Offline";
+        indicator.className = "eden-connection-offline";
+    }
+}
+
+window.updateEdenConnectionIndicator =
+    updateEdenConnectionIndicator;
+
+window.addEventListener(
+    "online",
+    updateEdenConnectionIndicator
+);
+
+window.addEventListener(
+    "offline",
+    updateEdenConnectionIndicator
+);
+
+document.addEventListener(
+    "DOMContentLoaded",
+    updateEdenConnectionIndicator
+);
+
+async function loadEdenLauncherIconConfig() {
+    try {
+        const response = await fetch(
+            "./launcher-icon-update.json",
+            {
+                cache: "no-store"
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP ${response.status}`
+            );
+        }
+
+        const config = await response.json();
+
+        window.EDEN_LAUNCHER_ICON_CONFIG =
+            config;
+
+        console.log(
+            "EDEN LAUNCHER ICON CONFIG:",
+            config
+        );
+
+        return config;
+    } catch (error) {
+        console.error(
+            "EDEN LAUNCHER ICON CONFIG ERROR:",
+            error
+        );
+
+        return null;
+    }
+}
+
+window.loadEdenLauncherIconConfig =
+    loadEdenLauncherIconConfig;
+
+loadEdenLauncherIconConfig();
+
+function getEdenLauncherIconPath(fileName = "ic_launcher.png") {
+    const config =
+        window.EDEN_LAUNCHER_ICON_CONFIG;
+
+    if (!config) return null;
+
+    const bucket =
+        config.launcherIcon?.bucket ||
+        EDEN_APP_ASSETS.bucket;
+
+    const folder =
+        config.launcherIcon?.folder ||
+        EDEN_APP_ASSETS.launcherIconFolder;
+
+    const file =
+        config.launcherIcon?.file ||
+        fileName;
+
+    return `${folder}/${file}`;
+}
+
+window.getEdenLauncherIconPath =
+    getEdenLauncherIconPath;
+
+async function uploadEdenLauncherIcon(file, round = false) {
+    if (!file) {
+        console.error(
+            "EDEN LAUNCHER ICON: No file selected."
+        );
+        return null;
+    }
+
+    const fileName = round
+        ? "ic_launcher_round.png"
+        : "ic_launcher.png";
+
+    const path =
+        `${EDEN_APP_ASSETS.launcherIconFolder}/${fileName}`;
+
+    const { data, error } = await supabase.storage
+        .from(EDEN_APP_ASSETS.bucket)
+        .upload(path, file, {
+            upsert: true,
+            contentType: "image/png"
+        });
+
+    if (error) {
+        console.error(
+            "EDEN LAUNCHER ICON UPLOAD ERROR:",
+            error
+        );
+        return null;
+    }
+
+    console.log(
+        "EDEN LAUNCHER ICON UPLOADED:",
+        data
+    );
+
+    return data;
+}
+
+window.uploadEdenLauncherIcon =
+    uploadEdenLauncherIcon;
+
+function setupEdenLauncherIconDeveloperControls() {
+    const config = window.EDEN_LAUNCHER_ICON_CONFIG;
+
+    if (!config) return;
+
+    const existing =
+        document.getElementById("eden-launcher-icon-controls");
+
+    if (existing) return;
+
+    const controls = document.createElement("section");
+    controls.id = "eden-launcher-icon-controls";
+    controls.style.display = "none";
+
+    controls.innerHTML = `
+        <h3>Launcher Icon</h3>
+
+        <input
+            id="eden-launcher-icon-file"
+            type="file"
+            accept="image/png"
+        >
+
+        <button
+            id="eden-launcher-icon-upload"
+            type="button"
+        >
+            Upload Launcher Icon
+        </button>
+
+        <input
+            id="eden-launcher-icon-round-file"
+            type="file"
+            accept="image/png"
+        >
+
+        <button
+            id="eden-launcher-icon-round-upload"
+            type="button"
+        >
+            Upload Round Launcher Icon
+        </button>
+
+        <p id="eden-launcher-icon-status"></p>
+    `;
+
+    document.body.appendChild(controls);
+
+    const uploadButton =
+        document.getElementById(
+            "eden-launcher-icon-upload"
+        );
+
+    const roundUploadButton =
+        document.getElementById(
+            "eden-launcher-icon-round-upload"
+        );
+
+    const status =
+        document.getElementById(
+            "eden-launcher-icon-status"
+        );
+
+    uploadButton?.addEventListener("click", async () => {
+        const file =
+            document.getElementById(
+                "eden-launcher-icon-file"
+            )?.files?.[0];
+
+        status.textContent = "Uploading...";
+
+        const result =
+            await uploadEdenLauncherIcon(file, false);
+
+        status.textContent =
+            result
+                ? "Launcher icon uploaded."
+                : "Launcher icon upload failed.";
+    });
+
+    roundUploadButton?.addEventListener(
+        "click",
+        async () => {
+            const file =
+                document.getElementById(
+                    "eden-launcher-icon-round-file"
+                )?.files?.[0];
+
+            status.textContent = "Uploading...";
+
+            const result =
+                await uploadEdenLauncherIcon(
+                    file,
+                    true
+                );
+
+            status.textContent =
+                result
+                    ? "Round launcher icon uploaded."
+                    : "Round launcher icon upload failed.";
+        }
+    );
+
+    window.edenLauncherIconControls =
+        controls;
+}
+
+async function initializeEdenAppAssets() {
+    await loadEdenLauncherIconConfig();
+
+    setupEdenLauncherIconDeveloperControls();
+
+    await getEdenCloudStorageUsage();
+
+    updateEdenOnlineState();
+    updateEdenConnectionIndicator();
+}
+
+window.initializeEdenAppAssets =
+    initializeEdenAppAssets;
+
+initializeEdenAppAssets();

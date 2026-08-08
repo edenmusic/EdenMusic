@@ -1,0 +1,76 @@
+package com.edenmusic.app;
+
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.webkit.PermissionRequest;
+
+import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import com.getcapacitor.BridgeActivity;
+
+public class MainActivity extends BridgeActivity {
+
+    private static final int MEDIA_PERMISSION_REQUEST = 1001;
+    private PermissionRequest pendingPermissionRequest;
+
+    @Override
+    public void onPermissionRequest(final PermissionRequest request) {
+        runOnUiThread(() -> {
+            pendingPermissionRequest = request;
+
+            boolean cameraGranted =
+                ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                    == PackageManager.PERMISSION_GRANTED;
+
+            boolean audioGranted =
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED;
+
+            if (cameraGranted && audioGranted) {
+                request.grant(request.getResources());
+                pendingPermissionRequest = null;
+                return;
+            }
+
+            ActivityCompat.requestPermissions(
+                this,
+                new String[] {
+                    Manifest.permission.CAMERA,
+                    Manifest.permission.RECORD_AUDIO
+                },
+                MEDIA_PERMISSION_REQUEST
+            );
+        });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+        int requestCode,
+        @NonNull String[] permissions,
+        @NonNull int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode != MEDIA_PERMISSION_REQUEST || pendingPermissionRequest == null) {
+            return;
+        }
+
+        boolean cameraGranted =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED;
+
+        boolean audioGranted =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED;
+
+        if (cameraGranted && audioGranted) {
+            pendingPermissionRequest.grant(pendingPermissionRequest.getResources());
+        } else {
+            pendingPermissionRequest.deny();
+        }
+
+        pendingPermissionRequest = null;
+    }
+}

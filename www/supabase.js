@@ -1,0 +1,16 @@
+import { createClient } from "./supabase-browser.js";
+
+const supabaseUrl = "https://kokjxhgnguskgioeqhul.supabase.co"
+const supabaseKey = "sb_publishable_zoBChaJuIHnR0ArIGK4MKA_B9XBi3PN"
+
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage
+    }
+});
+
+
+window.supabase = supabase;

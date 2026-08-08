@@ -1,0 +1,2256 @@
+import { supabase } from './supabase.js';
+
+// Initialization
+alert("Welcome to Eden Music!");
+
+// App state
+let dynamicTrackDatabase = {};
+let activelyPlayingTrackId = null;
+let loadedTracks = [];
+
+// Load songs from Supabase
+async function loadSongsFromSupabase() {
+    const { data, error } = await supabase
+        .from("song")
+        .select("*")
+        .order("title");
+
+    if (error) {
+        console.error(
+            "Supabase songs error:",
+            JSON.stringify(error, null, 2)
+        );
+        return;
+    }
+
+    loadedTracks = data.map(song => ({ id: song.id, title: song.title, artist: song.artist || "Eden", duration: song.duration, audioUrl: song.audio_url, coverUrl: song.cover_url, videoUrl: song.video_url || "", lyrics: song.lyrics || "" }));
+    data.forEach(song => {
+        const track = {
+            id: song.id,
+            title: song.title,
+            artist: song.artist || "Eden",
+            duration: song.duration,
+            audioUrl: song.audio_url,
+            coverUrl: song.cover_url,
+            videoUrl: song.video_url || "",
+            lyrics: song.lyrics || "",
+        };
+
+        // Allow lookup by both UUID and title
+        dynamicTrackDatabase[song.id] = track;
+        dynamicTrackDatabase[song.title] = track; dynamicTrackDatabase[song.title.toLowerCase()] = track;
+    });
+
+    console.log("Songs loaded from Supabase:", data);
+    console.log("EDEN SONG DATA:", JSON.stringify(data, null, 2));
+    console.log("EDEN VIDEO FROM DATABASE:", JSON.stringify(data.map(song => ({ title: song.title, video_url: song.video_url })), null, 2));
+    renderSongList();
+}
+// Media Streaming Node Interceptor State Events
+function renderSongList() {
+    const songList = document.getElementById("song-list");
+    const songCount = document.getElementById("song-count");
+
+    if (!songList) return;
+
+    songList.innerHTML = loadedTracks.map((track, index) => {
+        const minutes = Math.floor((track.duration || 0) / 60);
+        const seconds = Math.floor((track.duration || 0) % 60).toString().padStart(2, "0");
+        const duration = track.duration ? `${minutes}:${seconds}` : "--:--";
+        const cover = track.coverUrl
+            ? `<img src="${track.coverUrl}" alt="${track.title} cover">`
+            : "🎵";
+
+        return `<article class="song-row" data-title="${track.title}">
+            <div class="song-number">${String(index + 1).padStart(2, "0")}</div>
+            <div class="song-cover">${cover}</div>
+            <div class="song-details">
+                <h3>${track.title}</h3>
+                <p>${track.artist} • R&B</p>
+            </div>
+            <span class="song-duration">${duration}</span>
+            <button class="song-play" onclick="playSong('${track.id}')">▶</button>
+        </article>`;
+    }).join("");
+
+    if (songCount) {
+        songCount.textContent = `${loadedTracks.length} ${loadedTracks.length === 1 ? "song" : "songs"}`;
+    }
+}
+
+async function checkDeveloperSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) return;
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("role, display_name")
+        .eq("user_id", session.user.id)
+        .single();
+
+    developerUserId = session.user.id;
+    if (error || profile?.role !== "developer") {
+        await supabase.auth.signOut();
+        return;
+    }
+
+    const loginPanel = document.getElementById("developer-login");
+    const dashboardHeader = document.getElementById("developer-dashboard-header");
+    const controls = document.getElementById("developer-controls");
+
+    if (loginPanel) loginPanel.style.display = "none";
+    if (dashboardHeader) dashboardHeader.style.display = "block";
+    if (controls) controls.style.display = "flex";
+    loadDeveloperReleases();
+    loadDeveloperProfile();
+    loadFunVaultVideos();
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+    loadPublicReels();
+    loadFanAccount();
+    checkDeveloperSession();
+
+    const progressBar = document.getElementById("player-progress");
+    const currentTimeDisplay = document.getElementById("player-current-time");
+    const durationDisplay = document.getElementById("player-duration");
+
+    function formatTime(seconds) {
+        if (!Number.isFinite(seconds)) return "0:00";
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60).toString().padStart(2, "0");
+        return minutes + ":" + secs;
+    }
+
+    const audio = document.getElementById("audio-player");
+    const video = document.getElementById("player-video");
+    const playButton = document.getElementById("main-play-button");
+    const visualizer = document.getElementById("visualizer");
+
+    function getActiveMedia() {
+        if (video && video.src && !video.paused) return video;
+        if (video && video.src && !audio?.src) return video;
+        return audio;
+    }
+
+    function updatePlayerDisplay(media) {
+        if (!media) return;
+
+        if (progressBar) {
+            progressBar.max = Number.isFinite(media.duration) ? media.duration : 0;
+            progressBar.value = media.currentTime || 0;
+        }
+
+        if (currentTimeDisplay) {
+            currentTimeDisplay.textContent = formatTime(media.currentTime);
+        }
+
+        if (durationDisplay) {
+            durationDisplay.textContent = formatTime(media.duration);
+        }
+    }
+
+    function handlePlay() {
+        if (playButton) playButton.textContent = "⏸";
+        if (visualizer) visualizer.classList.add("playing");
+    }
+
+    function handlePause() {
+        if (playButton) playButton.textContent = "▶";
+        if (visualizer) visualizer.classList.remove("playing");
+    }
+
+    function handleEnded() {
+        if (loadedTracks.length > 1) {
+            nextSong();
+        } else {
+            handlePause();
+        }
+    }
+
+    [audio, video].forEach(media => {
+        if (!media) return;
+
+        media.addEventListener("loadedmetadata", () => {
+            updatePlayerDisplay(media);
+        });
+
+        media.addEventListener("timeupdate", () => {
+            if (getActiveMedia() === media) {
+                updatePlayerDisplay(media);
+            }
+        });
+
+        media.addEventListener("play", handlePlay);
+        media.addEventListener("pause", handlePause);
+        media.addEventListener("ended", handleEnded);
+    });
+
+    if (progressBar) {
+        progressBar.addEventListener("input", () => {
+            const activeMedia = getActiveMedia();
+            if (activeMedia) {
+                activeMedia.currentTime = Number(progressBar.value);
+            }
+        });
+    }
+
+    loadSongsFromSupabase();
+});
+
+// 1. App Router Controller Mechanics
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-view').forEach(view => view.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`${tabName}-view`).classList.add('active');
+    
+    const navButtons = document.querySelectorAll('.nav-item');
+    if (tabName === 'home') navButtons[0].classList.add('active');
+    if (tabName === 'songs') navButtons[1].classList.add('active');
+    if (tabName === 'vault') navButtons[2].classList.add('active');
+    if (tabName === 'profile') navButtons[3].classList.add('active');
+}
+
+// 2. Playback Ingest Automation System
+function playSong(trackId) {
+    let track = dynamicTrackDatabase[trackId] || dynamicTrackDatabase[String(trackId).toLowerCase()];
+
+    if (!track) {
+        track = {
+            id: trackId,
+            title: trackId,
+            artist: "Eden"
+        };
+    }
+
+    activelyPlayingTrackId = track.id;
+    console.log("EDEN PLAY TRACK:", track);
+    console.log("EDEN VIDEO URL:", track.videoUrl);
+    console.log("EDEN FULL TRACK:", JSON.stringify(track, null, 2));
+
+    const player = document.getElementById("song-player");
+    const audio = document.getElementById("audio-player");
+    const title = document.getElementById("player-title");
+    const artist = document.getElementById("player-artist");
+    const cover = document.getElementById("player-cover");
+    const lyricsElement = document.getElementById("player-lyrics-text");
+    const videoContainer = document.getElementById("player-video-container");
+    const video = document.getElementById("player-video");
+
+    if (player) {
+        player.classList.add("active");
+    }
+
+    if (title) {
+        title.textContent = track.title;
+    }
+
+    if (artist) {
+        artist.textContent = track.artist || "Eden";
+    }
+
+    if (lyricsElement) {
+        lyricsElement.textContent = track.lyrics || "Lyrics will appear here.";
+    }
+
+    if (cover) {
+        if (track.coverUrl) {
+            cover.innerHTML = `<img src="${track.coverUrl}" alt="${track.title} cover">`;
+        } else {
+            cover.textContent = "🎵";
+        }
+    }
+
+if (video && videoContainer) {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    videoContainer.style.display = "none";
+}
+
+if (audio) {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+}
+
+if (track.videoUrl && video && videoContainer) {
+    videoContainer.style.display = "block";
+    video.src = track.videoUrl;
+    video.load();
+
+    video.play().catch(error => {
+        console.error("Video playback error:", error);
+    });
+} else if (audio && track.audioUrl) {
+    audio.src = track.audioUrl;
+    audio.load();
+
+    audio.play().catch(error => {
+        console.error("Audio playback error:", error);
+    });
+}
+
+document.body.classList.add("player-open");
+
+    renderLyricsDisplay(track.id);
+}
+
+// 3. Media Ingestion Node Engine (Artist Dashboard Preference)
+let developerUserId = null;
+async function developerLogin() {
+    const emailInput = document.getElementById("developer-email");
+    const passwordInput = document.getElementById("developer-password");
+    const message = document.getElementById("developer-login-message");
+    const button = document.getElementById("developer-login-button");
+
+    const email = emailInput?.value.trim();
+    const password = passwordInput?.value;
+
+    if (!email || !password) {
+        if (message) message.textContent = "Enter your email and password.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Signing in...";
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (error) {
+        console.error("Developer login error:", error);
+        if (message) message.textContent = "Login failed. Check your credentials.";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Developer Login";
+        }
+        return;
+    }
+
+    const userId = data.user?.id;
+    developerUserId = userId;
+
+    const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role, display_name")
+        .eq("user_id", userId)
+        .single();
+
+    if (profileError || profile?.role !== "developer") {
+        await supabase.auth.signOut();
+        if (message) message.textContent = "This account is not authorized as a developer.";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Developer Login";
+        }
+        return;
+    }
+
+    if (message) message.textContent = `Welcome, ${profile.display_name || "Developer"}.`;
+
+    document.getElementById("developer-login").style.display = "none";
+    document.getElementById("developer-dashboard-header").style.display = "block";
+    document.getElementById("developer-controls").style.display = "flex";
+    await loadDeveloperProfile();
+    await loadFunVaultVideos();
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Developer Login";
+    }
+}
+
+window.developerLogin = developerLogin;
+
+async function loadDeveloperReleases() {
+    const list = document.getElementById("developer-release-list");
+
+    if (!list) return;
+
+    list.innerHTML = '<p class="dashboard-empty">Loading releases...</p>';
+
+    const { data, error } = await supabase
+        .from("song")
+        .select("*")
+        .order("title");
+
+    if (error) {
+        console.error("Developer releases error:", error);
+        list.innerHTML = '<p class="dashboard-empty">Could not load releases.</p>';
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        list.innerHTML = '<p class="dashboard-empty">No songs published yet.</p>';
+        return;
+    }
+
+    list.innerHTML = data.map(song => `
+        <div class="developer-release-card">
+            <img src="${song.cover_url || ""}" alt="${song.title} cover">
+            <div class="developer-release-info">
+                <h4>${song.title}</h4>
+                <p>${song.artist || "Eden"}</p>
+                <div class="developer-release-actions">
+                    <button class="secondary-btn" onclick="editSong('${song.id}')">Edit Song</button>
+                    <button class="secondary-btn" onclick="editSongLyrics('${song.id}')">Edit Lyrics</button>
+                    <button class="danger-btn" onclick="deleteSong('${song.id}')">Delete</button>
+                </div>
+            </div>
+        </div>
+    `).join("");
+}
+async function saveSongToSupabase() {
+    const titleInput = document.getElementById("song-title-input");
+    const artistInput = document.getElementById("song-artist-input");
+    const audioInput = document.getElementById("song-audio-input");
+    const coverInput = document.getElementById("song-cover-input");
+    const videoInput = document.getElementById("song-video-input");
+    const lyricsInput = document.getElementById("song-lyrics-input");
+    const saveButton = document.getElementById("save-song-button");
+
+    const title = titleInput?.value.trim();
+    const artist = artistInput?.value.trim() || "Eden";
+    const audioFile = audioInput?.files[0];
+    const coverFile = coverInput?.files[0];
+    const videoFile = videoInput?.files[0];
+    const lyrics = lyricsInput?.value.trim() || "";
+
+    if (!title) {
+        alert("Please enter a song title.");
+        return;
+    }
+
+    if (!audioFile) {
+        alert("Please select an audio file.");
+        return;
+    }
+
+    if (!coverFile) {
+        alert("Please select cover artwork.");
+        return;
+    }
+
+    try {
+        if (saveButton) {
+            saveButton.disabled = true;
+            saveButton.textContent = "Uploading...";
+        }
+
+        const safeTitle = title
+            .replace(/[^a-zA-Z0-9-_]/g, "_")
+            .replace(/_+/g, "_");
+
+        const timestamp = Date.now();
+
+        const audioPath = `${timestamp}_${safeTitle}${audioFile.name.substring(audioFile.name.lastIndexOf("."))}`;
+        const coverPath = `${timestamp}_${safeTitle}_cover${coverFile.name.substring(coverFile.name.lastIndexOf("."))}`;
+
+        const { error: audioUploadError } = await supabase
+            .storage
+            .from("songs")
+            .upload(audioPath, audioFile, {
+                cacheControl: "3600",
+                upsert: false
+            });
+
+        if (audioUploadError) {
+            throw audioUploadError;
+        }
+
+        const { error: coverUploadError } = await supabase
+            .storage
+            .from("songs")
+            .upload(coverPath, coverFile, {
+                cacheControl: "3600",
+                upsert: false
+            });
+
+        if (coverUploadError) {
+            throw coverUploadError;
+        }
+
+        let videoUrl = "";
+
+        if (videoFile) {
+            const videoExtension = videoFile.name.substring(videoFile.name.lastIndexOf("."));
+            const videoPath = `${timestamp}_${safeTitle}_video${videoExtension}`;
+
+            const { error: videoUploadError } = await supabase
+                .storage
+                .from("songs")
+                .upload(videoPath, videoFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (videoUploadError) {
+                throw videoUploadError;
+            }
+
+            const { data: videoPublicData } = supabase
+                .storage
+                .from("songs")
+                .getPublicUrl(videoPath);
+
+            videoUrl = videoPublicData.publicUrl;
+        }
+
+        const { data: audioPublicData } = supabase
+            .storage
+            .from("songs")
+            .getPublicUrl(audioPath);
+
+        const { data: coverPublicData } = supabase
+            .storage
+            .from("songs")
+            .getPublicUrl(coverPath);
+
+        const audioUrl = audioPublicData.publicUrl;
+        const coverUrl = coverPublicData.publicUrl;
+
+        const audio = new Audio();
+        audio.src = audioUrl;
+
+        const duration = await new Promise((resolve, reject) => {
+            audio.addEventListener("loadedmetadata", () => {
+                resolve(Math.round(audio.duration));
+            });
+
+            audio.addEventListener("error", () => {
+                resolve(0);
+            });
+        });
+
+        const { error: insertError } = await supabase
+            .from("song")
+            .insert({
+                title: title,
+                artist: artist,
+                duration: duration,
+                audio_url: audioUrl,
+                cover_url: coverUrl,
+                video_url: videoUrl,
+                lyrics: lyrics
+            });
+
+        if (insertError) {
+            throw insertError;
+        }
+
+        alert("Song saved successfully!");
+
+        titleInput.value = "";
+        artistInput.value = "Eden";
+        audioInput.value = "";
+        coverInput.value = "";
+        lyricsInput.value = "";
+
+        await loadSongsFromSupabase();
+
+    } catch (error) {
+        console.error("Save song error:", error);
+        alert("Could not save the song. Check the browser console for details.");
+    } finally {
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = "Save Song";
+        }
+    }
+}
+
+function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const audioUrl = URL.createObjectURL(file);
+    const cleanTitle = file.name.replace(/\.[^/.]+$/, "");
+    const trackId = "track_" + Date.now();
+    
+    // Scrape running data cache context fields from manual layout text fields
+    const typedLyrics = document.getElementById('manual-lyrics-input').value.trim();
+
+    // Map properties structural dataset mapping configurations directly
+    dynamicTrackDatabase[trackId] = {
+        id: trackId,
+        title: cleanTitle,
+        audioUrl: audioUrl,
+        lyrics: typedLyrics || ""
+    };
+
+    const noSongsMsg = document.getElementById('no-songs-msg');
+    if (noSongsMsg) { noSongsMsg.remove(); }
+
+    const songListContainer = document.getElementById('dynamic-song-list');
+    const newButton = document.createElement('button');
+    newButton.className = 'song-btn';
+    newButton.id = `btn_${trackId}`;
+    newButton.innerHTML = `🎵 ${cleanTitle}`;
+    
+    newButton.onclick = function() {
+        playSong(trackId);
+    };
+
+    songListContainer.appendChild(newButton);
+    playSong(trackId);
+}
+// 4. Custom Manual Lyrics Update Implementation Engine
+function saveManualLyrics() {
+    const lyricsText = document.getElementById('manual-lyrics-input').value.trim();
+    
+    if (!activelyPlayingTrackId) {
+        alert("Please load or play a track first using Step 1 before assigning manual lyrics to it!");
+        return;
+    }
+
+    // Write directly into internal variable memory configuration cache layer
+    dynamicTrackDatabase[activelyPlayingTrackId].lyrics = lyricsText;
+    
+    // Command instant refresh layout cycles
+    renderLyricsDisplay(activelyPlayingTrackId);
+    alert("Lyrics updated successfully for the current track!");
+}
+
+// Layout Presentation Transform Engine Layer
+function renderLyricsDisplay(trackId) {
+    const track = dynamicTrackDatabase[trackId];
+
+    const lyricsBox = document.getElementById('active-lyrics-display');
+    const lyricsTextElement = document.getElementById('active-lyrics-text');
+    const manualLyricsInput = document.getElementById('manual-lyrics-input');
+
+    // The current Music screen does not have the old lyrics elements.
+    // Don't let that stop the player from opening.
+    if (!lyricsBox || !lyricsTextElement) {
+        return;
+    }
+
+    if (track && track.lyrics) {
+        lyricsBox.classList.remove('hidden');
+        lyricsTextElement.innerHTML = track.lyrics.replace(/\n/g, '<br>');
+
+        if (manualLyricsInput) {
+            manualLyricsInput.value = track.lyrics;
+        }
+    } else {
+        lyricsBox.classList.add('hidden');
+        lyricsTextElement.innerHTML = '';
+    }
+}
+
+// 5. Active Newsletter Ingest Hook
+function subscribeFan() {
+    const emailInput = document.getElementById('fan-email');
+    const emailValue = emailInput.value.trim();
+
+    if (emailValue === "") {
+        alert("Please enter a valid email address!");
+    } else {
+        alert(`Awesome! ${emailValue} has been added to the Inner Circle. Stay tuned for updates!`);
+        emailInput.value = ""; 
+    }
+}
+
+// 6. Interactive Multi-Functional Fan Vault Engine Manager
+function triggerVaultAction(type, itemName = '') {
+    if (type === 'video') {
+        alert("🎬 Loading Behind-the-Scenes Trailer... (Exclusive video feature drops fully in Phase 2!)");
+    } else if (type === 'merch') {
+        alert(`🛍️ "${itemName}" Pre-order option selected! Merch vault purchase functionality arriving next update.`);
+    } else if (type === 'concert') {
+        alert("🎫 Scanning tour database... No local shows scheduled yet. You'll get an alert here instantly when tour dates drop!");
+    } else if (type === 'release') {
+        alert("📅 'No Signal Days' is currently in post-production. The exclusive dynamic countdown timer activates in Phase 2!");
+    }
+}
+
+
+// ================= MUSIC SCREEN =================
+
+function openMusicScreen() {
+    const screen = document.getElementById("music-screen");
+
+    if (screen) {
+        screen.classList.add("active");
+        document.body.classList.add("music-open");
+    }
+}
+
+function closeMusicScreen() {
+    const screen = document.getElementById("music-screen");
+
+    if (screen) {
+        screen.classList.remove("active");
+        document.body.classList.remove("music-open");
+    }
+}
+
+function searchSongs() {
+    const searchInput = document.getElementById("song-search");
+    const songs = document.querySelectorAll(".song-row");
+
+    if (!searchInput) return;
+
+    const searchTerm = searchInput.value.toLowerCase().trim();
+
+    let visibleSongs = 0;
+
+    songs.forEach(song => {
+        const title = song.dataset.title.toLowerCase();
+
+        if (title.includes(searchTerm)) {
+            song.style.display = "flex";
+            visibleSongs++;
+        } else {
+            song.style.display = "none";
+        }
+    });
+
+    const count = document.getElementById("song-count");
+
+    if (count) {
+        count.textContent =
+            `${visibleSongs} song${visibleSongs === 1 ? "" : "s"}`;
+    }
+}
+function closeSongPlayer() {
+    const player = document.getElementById("song-player");
+
+    if (player) {
+        player.classList.remove("active");
+    }
+
+    document.body.classList.remove("player-open");
+}
+
+
+function previousSong() {
+    if (!loadedTracks.length) return;
+
+    const currentIndex = loadedTracks.findIndex(track => track.id === activelyPlayingTrackId);
+    if (currentIndex === -1) return;
+
+    const previousIndex = (currentIndex - 1 + loadedTracks.length) % loadedTracks.length;
+    playSong(loadedTracks[previousIndex].id);
+}
+
+function nextSong() {
+    if (!loadedTracks.length) return;
+
+    const currentIndex = loadedTracks.findIndex(track => track.id === activelyPlayingTrackId);
+    if (currentIndex === -1) return;
+
+    const nextIndex = (currentIndex + 1) % loadedTracks.length;
+    playSong(loadedTracks[nextIndex].id);
+}
+
+function togglePlayer() {
+    const audio = document.getElementById("audio-player");
+    const video = document.getElementById("player-video");
+
+    const activeMedia = video && video.src ? video : audio;
+
+    if (!activeMedia) return;
+
+    if (activeMedia.paused) {
+        activeMedia.play().catch(error => {
+            console.error("Media playback error:", error);
+        });
+    } else {
+        activeMedia.pause();
+    }
+}
+
+window.openMusicScreen = openMusicScreen;
+window.closeMusicScreen = closeMusicScreen;
+window.searchSongs = searchSongs;
+window.playSong = playSong;
+window.closeSongPlayer = closeSongPlayer;
+window.togglePlayer = togglePlayer;
+window.previousSong = previousSong;
+window.nextSong = nextSong;
+window.saveSongToSupabase = saveSongToSupabase;
+
+
+console.log("EDEN DEBUG - player classes on startup:", document.getElementById("song-player")?.className);
+
+
+async function editSongLyrics(songId) {
+    const editor = document.getElementById("lyrics-editor");
+    const titleElement = document.getElementById("lyrics-editor-title");
+    const lyricsInput = document.getElementById("lyrics-editor-input");
+    const message = document.getElementById("lyrics-editor-message");
+
+    if (!editor || !titleElement || !lyricsInput) return;
+
+    const { data: song, error } = await supabase
+        .from("song")
+        .select("id, title, lyrics")
+        .eq("id", songId)
+        .single();
+
+    if (error) {
+        console.error("Load lyrics error:", error);
+        alert("Could not load the song lyrics.");
+        return;
+    }
+
+    editor.dataset.songId = song.id;
+    titleElement.textContent = "Edit Lyrics — " + song.title;
+    lyricsInput.value = song.lyrics || "";
+
+    if (message) message.textContent = "";
+
+    editor.style.display = "block";
+    editor.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+window.editSongLyrics = editSongLyrics;
+
+
+async function deleteSong(songId) {
+    const confirmed = confirm(
+        "Are you sure you want to delete this song?"
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    const { data: song, error: songError } = await supabase
+        .from("song")
+        .select("id, title")
+        .eq("id", songId)
+        .single();
+
+    if (songError) {
+        console.error("Load song for deletion error:", songError);
+        alert("Could not find the song.");
+        return;
+    }
+
+    const { error: deleteError } = await supabase
+        .from("song")
+        .delete()
+        .eq("id", songId);
+
+    if (deleteError) {
+        console.error("Delete song error:", deleteError);
+        alert("Could not delete the song.");
+        return;
+    }
+
+    alert(`"${song.title}" was deleted successfully.`);
+
+    await loadDeveloperReleases();
+    await loadSongsFromSupabase();
+}
+
+window.deleteSong = deleteSong;
+
+
+async function loadFunVaultVideos() {
+    const list = document.getElementById("fun-vault-list");
+
+    if (!list) return;
+
+    const { data: videos, error } = await supabase
+        .from("fun_vault_videos")
+        .select("id, title, description, video_url, thumbnail_url, created_at, is_published")
+        .order("created_at", { ascending: false });
+
+    if (error) {
+        console.error("Load Fun Vault videos error:", error);
+        list.innerHTML = '<p class="dashboard-empty">Could not load Fun Vault videos.</p>';
+        return;
+    }
+
+    if (!videos?.length) {
+        list.innerHTML = '<p class="dashboard-empty">No Fun Vault videos yet.</p>';
+        return;
+    }
+
+    list.innerHTML = videos.map(video => `
+        <article class="developer-release-card">
+            <video class="dashboard-vault-video" controls playsinline preload="metadata" src="${escapeHtmlAttribute(video.video_url)}"></video>
+            <div>
+                <span class="eyebrow">${video.is_published ? "PUBLISHED" : "DRAFT"}</span>
+                <h3>${escapeHtml(video.title)}</h3>
+                <p>${escapeHtml(video.description || "")}</p>
+            </div>
+
+            <button
+                type="button"
+                class="secondary-btn"
+                onclick="deleteFunVaultVideo('${video.id}')"
+            >
+                Delete
+            </button>
+        </article>
+    `).join("");
+}
+
+async function saveFunVaultVideo() {
+    const titleInput = document.getElementById("fun-vault-title");
+    const descriptionInput = document.getElementById("fun-vault-description");
+    const videoInput = document.getElementById("fun-vault-video-input");
+    const publishedInput = document.getElementById("fun-vault-published");
+    const message = document.getElementById("fun-vault-save-message");
+    const button = document.getElementById("save-fun-vault-button");
+
+    const title = titleInput?.value.trim();
+    const description = descriptionInput?.value.trim() || "";
+    const videoFile = videoInput?.files?.[0];
+    const isPublished = publishedInput?.checked ?? true;
+
+    if (!title) {
+        if (message) message.textContent = "Please enter a video title.";
+        return;
+    }
+
+    if (!videoFile) {
+        if (message) message.textContent = "Please choose a video file.";
+        return;
+    }
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+        if (message) message.textContent = "Developer session not found.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Uploading...";
+    }
+
+    const fileExtension =
+        videoFile.name.split(".").pop()?.toLowerCase() || "mp4";
+
+    const filePath =
+        `${user.id}/${crypto.randomUUID()}.${fileExtension}`;
+
+    const { error: uploadError } = await supabase.storage
+        .from("fun-vault-videos")
+        .upload(filePath, videoFile, {
+            upsert: false,
+            contentType: videoFile.type
+        });
+
+    if (uploadError) {
+        console.error("Fun Vault upload error:", uploadError);
+
+        if (message) {
+            message.textContent = "Could not upload the video.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Upload Fun Vault Video";
+        }
+
+        return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+        .from("fun-vault-videos")
+        .getPublicUrl(filePath);
+
+    const videoUrl = publicUrlData?.publicUrl;
+
+    if (!videoUrl) {
+        if (message) {
+            message.textContent = "Video uploaded, but its URL could not be created.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Upload Fun Vault Video";
+        }
+
+        return;
+    }
+
+    const { error: insertError } = await supabase
+        .from("fun_vault_videos")
+        .insert({
+            title,
+            description,
+            video_url: videoUrl,
+            thumbnail_url: "",
+            is_published: isPublished
+        });
+
+    if (insertError) {
+        console.error("Save Fun Vault video error:", insertError);
+
+        if (message) {
+            message.textContent = "Video uploaded, but its information could not be saved.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Upload Fun Vault Video";
+        }
+
+        return;
+    }
+
+    if (message) {
+        message.textContent = "Fun Vault video uploaded successfully!";
+    }
+
+    if (titleInput) titleInput.value = "";
+    if (descriptionInput) descriptionInput.value = "";
+    if (videoInput) videoInput.value = "";
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Upload Fun Vault Video";
+    }
+
+    await loadFunVaultVideos();
+}
+
+async function deleteFunVaultVideo(videoId) {
+    if (!videoId) return;
+
+    const confirmed = window.confirm(
+        "Delete this Fun Vault video?"
+    );
+
+    if (!confirmed) return;
+
+    const { data: video, error: videoError } = await supabase
+        .from("fun_vault_videos")
+        .select("video_url")
+        .eq("id", videoId)
+        .single();
+
+    if (videoError) {
+        console.error("Find Fun Vault video error:", videoError);
+        return;
+    }
+
+    const videoUrl = video?.video_url || "";
+    const marker = "/storage/v1/object/public/fun-vault-videos/";
+
+    if (videoUrl.includes(marker)) {
+        const filePath = decodeURIComponent(
+            videoUrl.split(marker)[1]
+        );
+
+        const { error: storageError } = await supabase.storage
+            .from("fun-vault-videos")
+            .remove([filePath]);
+
+        if (storageError) {
+            console.error("Delete Fun Vault file error:", storageError);
+        }
+    }
+
+    const { error: deleteError } = await supabase
+        .from("fun_vault_videos")
+        .delete()
+        .eq("id", videoId);
+
+    if (deleteError) {
+        console.error("Delete Fun Vault database record error:", deleteError);
+        return;
+    }
+
+    await loadFunVaultVideos();
+}
+
+window.loadFunVaultVideos = loadFunVaultVideos;
+window.saveFunVaultVideo = saveFunVaultVideo;
+window.deleteFunVaultVideo = deleteFunVaultVideo;
+
+
+async function loadDeveloperProfile() {
+    const displayNameInput = document.getElementById("profile-display-name");
+    const bioInput = document.getElementById("profile-bio");
+
+    if (!displayNameInput || !bioInput) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) return;
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("display_name, bio, avatar_url")
+        .eq("user_id", session.user.id)
+        .single();
+
+    if (error) {
+        console.error("Load developer profile error:", error);
+        return;
+    }
+
+    displayNameInput.value = profile.display_name || "";
+    bioInput.value = profile.bio || "";
+
+    updateDeveloperAvatar(profile.avatar_url || "");
+
+    await loadSocialLinksEditor(session.user.id);
+}
+
+function updateDeveloperAvatar(url) {
+    const image = document.getElementById("developer-profile-avatar");
+    const placeholder = document.getElementById("developer-profile-avatar-placeholder");
+
+    if (!image || !placeholder) return;
+
+    if (url) {
+        image.src = url;
+        image.style.display = "block";
+        placeholder.style.display = "none";
+    } else {
+        image.removeAttribute("src");
+        image.style.display = "none";
+        placeholder.style.display = "flex";
+    }
+}
+
+function addSocialLinkField(platform = "", url = "") {
+    const container = document.getElementById("social-links-editor");
+
+    if (!container) return;
+
+    const row = document.createElement("div");
+    row.className = "social-link-editor-row";
+
+    const platformInput = document.createElement("input");
+    platformInput.type = "text";
+    platformInput.className = "social-platform-input";
+    platformInput.placeholder = "Platform name";
+    platformInput.value = platform;
+
+    const urlInput = document.createElement("input");
+    urlInput.type = "url";
+    urlInput.className = "social-url-input";
+    urlInput.placeholder = "https://...";
+    urlInput.value = url;
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "secondary-btn remove-social-link-button";
+    removeButton.textContent = "Remove";
+
+    removeButton.addEventListener("click", () => {
+        row.remove();
+    });
+
+    row.appendChild(platformInput);
+    row.appendChild(urlInput);
+    row.appendChild(removeButton);
+
+    container.appendChild(row);
+}
+
+async function loadSocialLinksEditor(userId) {
+    const container = document.getElementById("social-links-editor");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const { data: links, error } = await supabase
+        .from("profile_social_links")
+        .select("id, platform_name, profile_url")
+        .eq("profile_user_id", userId)
+        .order("created_at", { ascending: true });
+
+    if (error) {
+        console.error("Load social links error:", error);
+        return;
+    }
+
+    if (!links?.length) {
+        addSocialLinkField();
+        return;
+    }
+
+    links.forEach(link => {
+        addSocialLinkField(link.platform_name, link.profile_url);
+    });
+}
+
+async function saveDeveloperProfile() {
+    const displayNameInput = document.getElementById("profile-display-name");
+    const bioInput = document.getElementById("profile-bio");
+    const avatarFileInput = document.getElementById("profile-avatar-file");
+    const message = document.getElementById("profile-save-message");
+    const button = document.getElementById("save-profile-button");
+
+    const displayName = displayNameInput?.value.trim();
+    const bio = bioInput?.value.trim() || "";
+
+    if (!displayName) {
+        if (message) message.textContent = "Please enter a display name.";
+        return;
+    }
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const userId = user?.id || developerUserId;
+
+    if (userError || !userId) {
+        console.error("Developer user error:", userError);
+        if (message) message.textContent = "Developer session not found.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Saving...";
+    }
+
+    let avatarUrl = null;
+
+    const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("user_id", userId)
+        .single();
+
+    avatarUrl = currentProfile?.avatar_url || null;
+
+    const avatarFile = avatarFileInput?.files?.[0];
+
+    if (avatarFile) {
+        const fileExtension = avatarFile.name.split(".").pop()?.toLowerCase() || "jpg";
+        const filePath = `${userId}/avatar.${fileExtension}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from("profiles-avatars")
+            .upload(filePath, avatarFile, {
+                upsert: true,
+                contentType: avatarFile.type
+            });
+
+        if (uploadError) {
+            console.error("Avatar upload error:", uploadError);
+
+            if (message) message.textContent = "Could not upload profile picture.";
+
+            if (button) {
+                button.disabled = false;
+                button.textContent = "Save Profile";
+            }
+
+            return;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+            .from("profiles-avatars")
+            .getPublicUrl(filePath);
+
+        avatarUrl = publicUrlData?.publicUrl || avatarUrl;
+    }
+
+    const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+            display_name: displayName,
+            bio: bio,
+            avatar_url: avatarUrl
+        })
+        .eq("user_id", userId);
+
+    if (profileError) {
+        console.error("Save developer profile error:", profileError);
+
+        if (message) message.textContent = "Could not save the profile.";
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Save Profile";
+        }
+
+        return;
+    }
+
+    const rows = Array.from(
+        document.querySelectorAll(".social-link-editor-row")
+    )
+    .map(row => {
+        const platform = row
+            .querySelector(".social-platform-input")
+            ?.value.trim();
+
+        const url = row
+            .querySelector(".social-url-input")
+            ?.value.trim();
+
+        return {
+            platform_name: platform,
+            profile_url: url
+        };
+    })
+    .filter(link => link.platform_name && link.profile_url);
+
+    const { error: deleteError } = await supabase
+        .from("profile_social_links")
+        .delete()
+        .eq("profile_user_id", userId);
+
+    if (deleteError) {
+        console.error("Delete old social links error:", deleteError);
+
+        if (message) {
+            message.textContent = "Profile saved, but old social links could not be updated.";
+        }
+    } else if (rows.length) {
+        const { error: insertError } = await supabase
+            .from("profile_social_links")
+            .insert(
+                rows.map(link => ({
+                    profile_user_id: userId,
+                    platform_name: link.platform_name,
+                    profile_url: link.profile_url
+                }))
+            );
+
+        if (insertError) {
+            console.error("Save social links error:", insertError);
+
+            if (message) {
+                message.textContent =
+                    "Profile saved, but social links could not be saved.";
+            }
+
+            if (button) {
+                button.disabled = false;
+                button.textContent = "Save Profile";
+            }
+
+            return;
+        }
+    }
+
+    updateDeveloperAvatar(avatarUrl);
+
+    if (message) message.textContent = "Profile saved successfully!";
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Save Profile";
+    }
+
+    if (avatarFileInput) {
+        avatarFileInput.value = "";
+    }
+}
+
+async function loadPublicProfile() {
+    const nameElement = document.getElementById("public-profile-name");
+    const bioElement = document.getElementById("public-profile-bio");
+    const avatarImage = document.getElementById("public-profile-avatar");
+    const avatarPlaceholder = document.getElementById("public-profile-avatar-placeholder");
+    const socialContainer = document.getElementById("public-social-links");
+
+    if (!nameElement || !bioElement || !socialContainer) return;
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, bio, avatar_url")
+        .eq("role", "developer")
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error("Public profile error:", error);
+        return;
+    }
+
+    if (!profile) return;
+
+    nameElement.textContent = profile.display_name || "Eden";
+    bioElement.textContent = profile.bio || "R&B Artist & Producer";
+
+    if (profile.avatar_url && avatarImage && avatarPlaceholder) {
+        avatarImage.src = profile.avatar_url;
+        avatarImage.style.display = "block";
+        avatarPlaceholder.style.display = "none";
+    } else if (avatarImage && avatarPlaceholder) {
+        avatarImage.removeAttribute("src");
+        avatarImage.style.display = "none";
+        avatarPlaceholder.style.display = "flex";
+    }
+
+    socialContainer.innerHTML = "";
+
+    const { data: links, error: linksError } = await supabase
+        .from("profile_social_links")
+        .select("platform_name, profile_url")
+        .eq("profile_user_id", profile.user_id)
+        .order("created_at", { ascending: true });
+
+    if (linksError) {
+        console.error("Public social links error:", linksError);
+        return;
+    }
+
+    if (!links?.length) {
+        const emptyMessage = document.createElement("p");
+        emptyMessage.textContent = "Social links coming soon.";
+        socialContainer.appendChild(emptyMessage);
+        return;
+    }
+
+    links.forEach(link => {
+        const anchor = document.createElement("a");
+
+        anchor.href = link.profile_url;
+        anchor.target = "_blank";
+        anchor.rel = "noopener";
+        anchor.textContent = link.platform_name;
+
+        socialContainer.appendChild(anchor);
+    });
+}
+
+window.loadDeveloperProfile = loadDeveloperProfile;
+window.saveDeveloperProfile = saveDeveloperProfile;
+window.addSocialLinkField = addSocialLinkField;
+
+
+async function openProfileScreen() {
+    const profileScreen = document.getElementById("profile-screen");
+    if (!profileScreen) return;
+
+    profileScreen.classList.add("active");
+    await loadPublicProfile();
+}
+
+window.openProfileScreen = openProfileScreen;
+window.loadPublicProfile = loadPublicProfile;
+
+function closeProfileScreen() {
+    const profileScreen = document.getElementById("profile-screen");
+
+    if (!profileScreen) return;
+
+    profileScreen.classList.remove("active");
+    profileScreen.style.display = "";
+}
+
+window.closeProfileScreen = closeProfileScreen;
+
+function openDeveloperDashboard() {
+    const dashboard = document.getElementById("artist-dashboard");
+    if (!dashboard) return;
+
+    const profileScreen = document.getElementById("profile-screen");
+    if (profileScreen) {
+        profileScreen.classList.remove("active");
+        profileScreen.style.display = "none";
+    }
+
+    dashboard.style.display = "block";
+}
+
+function closeDeveloperDashboard() {
+    const dashboard = document.getElementById("artist-dashboard");
+    if (dashboard) {
+        dashboard.style.display = "none";
+    }
+
+    const profileScreen = document.getElementById("profile-screen");
+    if (profileScreen) {
+        profileScreen.style.display = "";
+        profileScreen.classList.add("active");
+        loadPublicProfile();
+    }
+}
+
+window.openDeveloperDashboard = openDeveloperDashboard;
+window.closeDeveloperDashboard = closeDeveloperDashboard;
+
+async function developerLogout() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+        console.error("Developer logout error:", error);
+        return;
+    }
+
+    developerUserId = null;
+
+    const dashboard = document.getElementById("artist-dashboard");
+    if (dashboard) {
+        dashboard.style.display = "none";
+    }
+
+    const loginPanel = document.getElementById("developer-login");
+    if (loginPanel) {
+        loginPanel.style.display = "block";
+    }
+
+    const dashboardHeader = document.getElementById("developer-dashboard-header");
+    if (dashboardHeader) {
+        dashboardHeader.style.display = "none";
+    }
+
+    const controls = document.getElementById("developer-controls");
+    if (controls) {
+        controls.style.display = "none";
+    }
+
+    const profileScreen = document.getElementById("profile-screen");
+    if (profileScreen) {
+        profileScreen.style.display = "";
+        profileScreen.classList.add("active");
+    }
+}
+
+window.developerLogout = developerLogout;
+
+async function saveEditedLyrics() {
+    const editor = document.getElementById("lyrics-editor");
+    const lyricsInput = document.getElementById("lyrics-editor-input");
+    const message = document.getElementById("lyrics-editor-message");
+    const button = document.getElementById("save-lyrics-button");
+
+    if (!editor || !lyricsInput) return;
+
+    const songId = editor.dataset.songId;
+    const lyrics = lyricsInput.value;
+
+    if (!songId) {
+        if (message) message.textContent = "No song selected.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Saving...";
+    }
+
+    const { error } = await supabase
+        .from("song")
+        .update({ lyrics })
+        .eq("id", songId);
+
+    if (error) {
+        console.error("Save edited lyrics error:", error);
+
+        if (message) {
+            message.textContent = "Could not save the lyrics.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Save Lyrics";
+        }
+
+        return;
+    }
+
+    if (message) {
+        message.textContent = "Lyrics saved successfully!";
+    }
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Save Lyrics";
+    }
+
+    await loadDeveloperReleases();
+    await loadSongsFromSupabase();
+}
+
+function cancelLyricsEdit() {
+    const editor = document.getElementById("lyrics-editor");
+
+    if (!editor) return;
+
+    editor.style.display = "none";
+    editor.dataset.songId = "";
+
+    const lyricsInput = document.getElementById("lyrics-editor-input");
+    const message = document.getElementById("lyrics-editor-message");
+
+    if (lyricsInput) lyricsInput.value = "";
+    if (message) message.textContent = "";
+}
+
+window.saveEditedLyrics = saveEditedLyrics;
+window.cancelLyricsEdit = cancelLyricsEdit;
+
+async function editSong(songId) {
+    const editor = document.getElementById("song-editor");
+    const titleElement = document.getElementById("song-editor-title");
+    const titleInput = document.getElementById("edit-song-title");
+    const artistInput = document.getElementById("edit-song-artist");
+    const audioInput = document.getElementById("edit-song-audio");
+    const coverInput = document.getElementById("edit-song-cover");
+    const videoInput = document.getElementById("edit-song-video");
+    const lyricsInput = document.getElementById("edit-song-lyrics");
+    const message = document.getElementById("song-editor-message");
+
+    if (!editor || !titleInput || !artistInput || !lyricsInput) return;
+
+    const { data: song, error } = await supabase
+        .from("song")
+        .select("id, title, artist, lyrics")
+        .eq("id", songId)
+        .single();
+
+    if (error) {
+        console.error("Load song for editing error:", error);
+        alert("Could not load the song.");
+        return;
+    }
+
+    editor.dataset.songId = song.id;
+
+    if (titleElement) {
+        titleElement.textContent = "Edit Song — " + song.title;
+    }
+
+    titleInput.value = song.title || "";
+    artistInput.value = song.artist || "Eden";
+    lyricsInput.value = song.lyrics || "";
+
+    if (audioInput) audioInput.value = "";
+    if (coverInput) coverInput.value = "";
+    if (videoInput) videoInput.value = "";
+    if (message) message.textContent = "";
+
+    editor.style.display = "block";
+    editor.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+    });
+}
+
+window.editSong = editSong;
+
+async function saveEditedSong() {
+    const editor = document.getElementById("song-editor");
+    const titleInput = document.getElementById("edit-song-title");
+    const artistInput = document.getElementById("edit-song-artist");
+    const audioInput = document.getElementById("edit-song-audio");
+    const coverInput = document.getElementById("edit-song-cover");
+    const videoInput = document.getElementById("edit-song-video");
+    const lyricsInput = document.getElementById("edit-song-lyrics");
+    const message = document.getElementById("song-editor-message");
+    const button = document.getElementById("save-song-edit-button");
+
+    if (!editor || !titleInput || !artistInput || !lyricsInput) return;
+
+    const songId = editor.dataset.songId;
+    const title = titleInput.value.trim();
+    const artist = artistInput.value.trim() || "Eden";
+    const lyrics = lyricsInput.value;
+
+    const audioFile = audioInput?.files[0];
+    const coverFile = coverInput?.files[0];
+    const videoFile = videoInput?.files[0];
+
+    if (!songId) {
+        if (message) message.textContent = "No song selected.";
+        return;
+    }
+
+    if (!title) {
+        if (message) message.textContent = "Song title is required.";
+        return;
+    }
+
+    try {
+        if (button) {
+            button.disabled = true;
+            button.textContent = "Saving...";
+        }
+
+        if (message) {
+            message.textContent = "Saving song changes...";
+        }
+
+        const updateData = {
+            title: title,
+            artist: artist,
+            lyrics: lyrics
+        };
+
+        if (audioFile) {
+            const safeTitle = title
+                .replace(/[^a-zA-Z0-9-_]/g, "_")
+                .replace(/_+/g, "_");
+
+            const timestamp = Date.now();
+
+            const audioExtension =
+                audioFile.name.substring(audioFile.name.lastIndexOf("."));
+
+            const audioPath =
+                `${timestamp}_${safeTitle}_audio${audioExtension}`;
+
+            const { error: audioUploadError } = await supabase
+                .storage
+                .from("songs")
+                .upload(audioPath, audioFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (audioUploadError) {
+                throw audioUploadError;
+            }
+
+        let videoUrl = "";
+
+        if (videoFile) {
+            const videoExtension = videoFile.name.substring(videoFile.name.lastIndexOf("."));
+            const videoPath = `${timestamp}_${safeTitle}_video${videoExtension}`;
+
+            const { error: videoUploadError } = await supabase
+                .storage
+                .from("songs")
+                .upload(videoPath, videoFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (videoUploadError) {
+                throw videoUploadError;
+            }
+
+            const { data: videoPublicData } = supabase
+                .storage
+                .from("songs")
+                .getPublicUrl(videoPath);
+
+            videoUrl = videoPublicData.publicUrl;
+        }
+
+            const { data: audioPublicData } = supabase
+                .storage
+                .from("songs")
+                .getPublicUrl(audioPath);
+
+            updateData.audio_url = audioPublicData.publicUrl;
+
+            const audio = new Audio();
+            audio.src = audioPublicData.publicUrl;
+
+            updateData.duration = await new Promise(resolve => {
+                audio.addEventListener("loadedmetadata", () => {
+                    resolve(Math.round(audio.duration));
+                });
+
+                audio.addEventListener("error", () => {
+                    resolve(0);
+                });
+            });
+        }
+
+        if (coverFile) {
+            const safeTitle = title
+                .replace(/[^a-zA-Z0-9-_]/g, "_")
+                .replace(/_+/g, "_");
+
+            const timestamp = Date.now();
+
+            const coverExtension =
+                coverFile.name.substring(coverFile.name.lastIndexOf("."));
+
+            const coverPath =
+                `${timestamp}_${safeTitle}_cover${coverExtension}`;
+
+            const { error: coverUploadError } = await supabase
+                .storage
+                .from("songs")
+                .upload(coverPath, coverFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (coverUploadError) {
+                throw coverUploadError;
+            }
+
+            const { data: coverPublicData } = supabase
+                .storage
+                .from("songs")
+                .getPublicUrl(coverPath);
+
+            updateData.cover_url = coverPublicData.publicUrl;
+        }
+
+        if (videoFile) {
+            const safeTitle = title
+                .replace(/[^a-zA-Z0-9-_]/g, "_")
+                .replace(/_+/g, "_");
+
+            const timestamp = Date.now();
+
+            const videoExtension =
+                videoFile.name.substring(videoFile.name.lastIndexOf("."));
+
+            const videoPath =
+                `${timestamp}_${safeTitle}_video${videoExtension}`;
+
+            const { error: videoUploadError } = await supabase
+                .storage
+                .from("songs")
+                .upload(videoPath, videoFile, {
+                    cacheControl: "3600",
+                    upsert: false
+                });
+
+            if (videoUploadError) {
+                throw videoUploadError;
+            }
+
+            const { data: videoPublicData } = supabase
+                .storage
+                .from("songs")
+                .getPublicUrl(videoPath);
+
+            updateData.video_url = videoPublicData.publicUrl;
+        }
+
+        const { error: updateError } = await supabase
+            .from("song")
+            .update(updateData)
+            .eq("id", songId);
+
+        if (updateError) {
+            throw updateError;
+        }
+
+        if (message) {
+            message.textContent = "Song changes saved successfully!";
+        }
+
+        if (audioInput) audioInput.value = "";
+        if (coverInput) coverInput.value = "";
+    if (videoInput) videoInput.value = "";
+
+        await loadDeveloperReleases();
+        await loadSongsFromSupabase();
+
+    } catch (error) {
+        console.error("Save edited song error:", error);
+
+        if (message) {
+            message.textContent = "Could not save the song changes.";
+        }
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Save Song Changes";
+        }
+    }
+}
+
+function cancelSongEdit() {
+    const editor = document.getElementById("song-editor");
+
+    if (!editor) return;
+
+    editor.style.display = "none";
+    editor.dataset.songId = "";
+
+    const titleInput = document.getElementById("edit-song-title");
+    const artistInput = document.getElementById("edit-song-artist");
+    const audioInput = document.getElementById("edit-song-audio");
+    const coverInput = document.getElementById("edit-song-cover");
+    const videoInput = document.getElementById("edit-song-video");
+    const lyricsInput = document.getElementById("edit-song-lyrics");
+    const message = document.getElementById("song-editor-message");
+
+    if (titleInput) titleInput.value = "";
+    if (artistInput) artistInput.value = "Eden";
+    if (audioInput) audioInput.value = "";
+    if (coverInput) coverInput.value = "";
+    if (videoInput) videoInput.value = "";
+    if (lyricsInput) lyricsInput.value = "";
+    if (message) message.textContent = "";
+}
+
+window.saveEditedSong = saveEditedSong;
+window.cancelSongEdit = cancelSongEdit;
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function escapeHtmlAttribute(value) {
+    return escapeHtml(value);
+}
+
+async function loadPublicReels() {
+    const container = document.getElementById("public-reels-container");
+
+    if (!container) return;
+
+    const { data: videos, error } = await supabase
+        .from("fun_vault_videos")
+        .select("id, title, description, video_url, thumbnail_url, created_at")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+    if (error) {
+        console.error("Public Fun Vault videos error:", error);
+        container.innerHTML =
+            '<p class="dashboard-empty">Could not load reels.</p>';
+        return;
+    }
+
+    if (!videos?.length) {
+        container.innerHTML =
+            '<p class="dashboard-empty">No reels available yet.</p>';
+        return;
+    }
+
+    container.innerHTML = videos.map(video => `
+        <article class="reel-card">
+            <video
+                class="public-reel-video"
+                controls
+                playsinline
+                preload="metadata"
+                ${video.thumbnail_url ? `poster="${escapeHtmlAttribute(video.thumbnail_url)}"` : ""}
+                src="${escapeHtmlAttribute(video.video_url)}"
+            >
+                Your browser does not support video playback.
+            </video>
+
+            <div class="reel-overlay">
+                <span>FUN VAULT</span>
+                <h3>${escapeHtml(video.title)}</h3>
+                ${
+                    video.description
+                        ? `<p>${escapeHtml(video.description)}</p>`
+                        : ""
+                }
+            </div>
+        </article>
+    `).join("");
+
+    console.log("Public Fun Vault reels loaded:", videos);
+}
+
+window.loadPublicReels = loadPublicReels;
+
+
+function showFanRegister() {
+    const registerPanel = document.getElementById("fan-register-panel");
+    const loginPanel = document.getElementById("fan-login-panel");
+    const accountPanel = document.getElementById("fan-account-panel");
+
+    if (registerPanel) registerPanel.style.display = "block";
+    if (loginPanel) loginPanel.style.display = "none";
+    if (accountPanel) accountPanel.style.display = "none";
+}
+
+function showFanLogin() {
+    const registerPanel = document.getElementById("fan-register-panel");
+    const loginPanel = document.getElementById("fan-login-panel");
+    const accountPanel = document.getElementById("fan-account-panel");
+
+    if (registerPanel) registerPanel.style.display = "none";
+    if (loginPanel) loginPanel.style.display = "block";
+    if (accountPanel) accountPanel.style.display = "none";
+}
+
+async function registerFanAccount() {
+    const nameInput = document.getElementById("fan-register-name");
+    const emailInput = document.getElementById("fan-register-email");
+    const passwordInput = document.getElementById("fan-register-password");
+    const message = document.getElementById("fan-register-message");
+    const button = document.getElementById("fan-register-button");
+
+    const displayName = nameInput?.value.trim();
+    const email = emailInput?.value.trim();
+    const password = passwordInput?.value;
+
+    if (!displayName) {
+        if (message) message.textContent = "Please enter your display name.";
+        return;
+    }
+
+    if (!email) {
+        if (message) message.textContent = "Please enter your email.";
+        return;
+    }
+
+    if (!password || password.length < 6) {
+        if (message) message.textContent = "Password must be at least 6 characters.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Creating account...";
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+        email,
+        password
+    });
+
+    if (error) {
+        console.error("Fan registration error:", error);
+
+        if (message) {
+            message.textContent = error.message;
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Create Account";
+        }
+
+        return;
+    }
+
+    const user = data?.user;
+
+    if (!user) {
+        if (message) {
+            message.textContent = "Account could not be created.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Create Account";
+        }
+
+        return;
+    }
+
+    const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+            user_id: user.id,
+            display_name: displayName,
+            bio: "",
+            avatar_url: "",
+            role: "fan"
+        });
+
+    if (profileError) {
+        console.error("Fan profile creation error:", profileError);
+
+        if (message) {
+            message.textContent =
+                "Account created, but the fan profile could not be saved.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Create Account";
+        }
+
+        return;
+    }
+
+    if (message) {
+        message.textContent =
+            "Account created successfully! You can now enter the Fan Vault.";
+    }
+
+    if (nameInput) nameInput.value = "";
+    if (emailInput) emailInput.value = "";
+    if (passwordInput) passwordInput.value = "";
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Create Account";
+    }
+
+    await loadFanAccount();
+}
+
+async function loginFanAccount() {
+    const emailInput = document.getElementById("fan-login-email");
+    const passwordInput = document.getElementById("fan-login-password");
+    const message = document.getElementById("fan-login-message");
+    const button = document.getElementById("fan-login-button");
+
+    const email = emailInput?.value.trim();
+    const password = passwordInput?.value;
+
+    if (!email || !password) {
+        if (message) message.textContent = "Enter your email and password.";
+        return;
+    }
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Signing in...";
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (error) {
+        console.error("Fan login error:", error);
+
+        if (message) {
+            message.textContent = error.message;
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Sign In";
+        }
+
+        return;
+    }
+
+    const user = data?.user;
+
+    if (!user) {
+        if (message) {
+            message.textContent = "Login failed.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Sign In";
+        }
+
+        return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, role")
+        .eq("user_id", user.id)
+        .single();
+
+    if (profileError || profile?.role !== "fan") {
+        console.error("Fan profile verification error:", profileError);
+
+        await supabase.auth.signOut();
+
+        if (message) {
+            message.textContent =
+                "This account is not registered as a fan account.";
+        }
+
+        if (button) {
+            button.disabled = false;
+            button.textContent = "Sign In";
+        }
+
+        return;
+    }
+
+    if (emailInput) emailInput.value = "";
+    if (passwordInput) passwordInput.value = "";
+
+    if (button) {
+        button.disabled = false;
+        button.textContent = "Sign In";
+    }
+
+    await loadFanAccount();
+}
+
+async function loadFanAccount() {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+        showFanRegister();
+        return;
+    }
+
+    const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, role")
+        .eq("user_id", session.user.id)
+        .single();
+
+    if (error || !profile || profile.role !== "fan") {
+        showFanRegister();
+        return;
+    }
+
+    const registerPanel = document.getElementById("fan-register-panel");
+    const loginPanel = document.getElementById("fan-login-panel");
+    const accountPanel = document.getElementById("fan-account-panel");
+    const nameElement = document.getElementById("fan-account-name");
+    const emailElement = document.getElementById("fan-account-email");
+
+    if (registerPanel) registerPanel.style.display = "none";
+    if (loginPanel) loginPanel.style.display = "none";
+    if (accountPanel) accountPanel.style.display = "block";
+
+    if (nameElement) {
+        nameElement.textContent =
+            `Welcome, ${profile.display_name || "Fan"}`;
+    }
+
+    if (emailElement) {
+        emailElement.textContent =
+            session.user.email || "";
+    }
+}
+
+async function fanLogout() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+        console.error("Fan logout error:", error);
+        return;
+    }
+
+    showFanRegister();
+}
+
+function openFanVault() {
+    showMessage("Fan Vault access will be connected next.");
+}
+
+window.showFanRegister = showFanRegister;
+window.showFanLogin = showFanLogin;
+window.registerFanAccount = registerFanAccount;
+window.loginFanAccount = loginFanAccount;
+window.loadFanAccount = loadFanAccount;
+window.fanLogout = fanLogout;
+window.openFanVault = openFanVault;
+
+
+function openFanAccountScreen() {
+    const screen = document.getElementById("fan-account-screen");
+
+    if (!screen) {
+        console.error("Fan account screen not found.");
+        return;
+    }
+
+    closeProfileScreen();
+
+    screen.classList.add("active");
+    screen.style.display = "block";
+
+    loadFanAccount();
+}
+
+window.openFanAccountScreen = openFanAccountScreen;
+
